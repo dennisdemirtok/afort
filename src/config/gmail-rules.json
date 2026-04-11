@@ -7,10 +7,7 @@
     },
     {
       "from": "ivni@bws.dk",
-      "has_attachment": "pdf"
-    },
-    {
-      "from": "kontoud@bws.dk",
+      "subject_contains": "Invoice/Creditnote",
       "has_attachment": "pdf"
     }
   ],

@@ -137,23 +137,24 @@ export async function pollGmail(includeRead = false): Promise<number> {
     // Extract invoice number from subject line
     // Fancywork: "Faktura 8/4/2026/WDT/DTF za druki..."
     // BWS: "Invoice/Creditnote 16276606 from Blue Water"
-    // BWS Statement: "Statement of Account 2026-03-31 - Customer 181751 / DK01-MAL01"
-    // BWS Reminder: "Reminder Account 181751 ..."
     const subjectInvoiceMatch = subject.match(/Faktura\s+([\d/]+\/\w+(?:\/\w+)?)/i)
-      || subject.match(/Invoice\/Creditnote\s+(\d+)/i)
-      || subject.match(/Statement of Account\s+([\d-]+)/i)
-      || subject.match(/Reminder Account\s+(\d+)/i);
+      || subject.match(/Invoice\/Creditnote\s+(\d+)/i);
     const invoiceNumber = parsed.invoiceNumber || (subjectInvoiceMatch ? subjectInvoiceMatch[1] : null);
 
-    // Extract vendor name from "From" header (e.g. "Zespół Fancywork DTF" <biuro@fancywork.pl>)
-    const fromName = from.replace(/<.*>/, "").replace(/"/g, "").trim();
+    // Map email domains to company names
+    const emailDomain = from.match(/@([^>]+)/)?.[1]?.toLowerCase() || "";
+    const vendorMap: Record<string, string> = {
+      "bws.dk": "Blue Water Shipping",
+      "fancywork.pl": "Fancywork DTF",
+    };
+    const fromName = vendorMap[emailDomain] || from.replace(/<.*>/, "").replace(/"/g, "").trim();
 
     createInvoice({
       gmail_message_id: messageId,
       sender: from,
       subject: subject,
       received_at: date ? new Date(date).toISOString() : null,
-      vendor_name: fromName || parsed.vendorName || from,
+      vendor_name: fromName,
       invoice_number: invoiceNumber,
       amount: parsed.amount,
       currency: parsed.currency || "SEK",
