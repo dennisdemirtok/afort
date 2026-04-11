@@ -43,6 +43,10 @@ async function getOrCreateLabel(labelName: string): Promise<string> {
 }
 
 function matchesRules(from: string, subject: string): boolean {
+  // Global filter: subject must contain something invoice-related
+  const invoiceKeywords = /faktura|invoice|rechnung|creditnote|pro\s*forma|bifogas|payment|zapłat/i;
+  if (!invoiceKeywords.test(subject)) return false;
+
   return gmailRules.rules.some((rule: any) => {
     const fromMatch = !rule.from || from.toLowerCase().includes(rule.from.toLowerCase());
     let subjectMatch = true;

@@ -1,32 +1,11 @@
 <!DOCTYPE html>
 <html class="light" lang="sv">
 <head>
-  <meta charset="utf-8"/>
-  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
   <title>AFORT - Faktura <%= invoice.invoice_number || '' %></title>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-  <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-  <style>
-    body { font-family: 'Inter', sans-serif; background-color: #f7f9fc; color: #29343a; }
-    .font-manrope { font-family: 'Manrope', sans-serif; }
-    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; display: inline-block; }
-  </style>
+  <%- include('partials/head') %>
 </head>
 <body>
-  <header class="fixed top-0 w-full z-50 bg-[#f7f9fc] flex justify-between items-center px-8 h-20">
-    <div class="flex items-center gap-12">
-      <a href="/invoices" class="text-2xl font-bold tracking-tight font-manrope">AFORT</a>
-      <nav class="hidden md:flex gap-2 items-center">
-        <a class="font-manrope text-sm font-bold text-[#0c56d0] px-3 py-2 rounded-xl" href="/invoices">Fakturor</a>
-        <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/payment-files">Betalfiler</a>
-        <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/payment-files/create">Skapa betalfil</a>
-        <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/bank-upload">Bankutdrag</a>
-        <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/api/export/csv">CSV Export</a>
-      </nav>
-    </div>
-    <a href="/logout" class="font-manrope text-sm text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl">Logga ut</a>
-  </header>
+  <%- include('partials/navbar') %>
 
   <main class="pt-24 pb-16 px-8 max-w-5xl mx-auto">
     <!-- Breadcrumb -->

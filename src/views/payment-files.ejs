@@ -1,33 +1,55 @@
-<% const body = `
-<div class="page-header">
-  <h1>Betalfiler</h1>
-  <a href="/payment-files/create" class="btn btn-primary btn-sm">Skapa ny betalfil</a>
-</div>
+<!DOCTYPE html>
+<html class="light" lang="sv">
+<head>
+  <title>AFORT - Betalfiler</title>
+  <%- include('partials/head') %>
+</head>
+<body>
+  <%- include('partials/navbar') %>
+  <main class="pt-24 pb-16 px-8 max-w-7xl mx-auto">
+    <section class="mb-10 flex items-center justify-between">
+      <div>
+        <h1 class="text-4xl font-extrabold font-manrope tracking-tight mb-2">Betalfiler</h1>
+        <p class="text-[#566168] text-sm">Genererade pain.001-filer for Nordea.</p>
+      </div>
+      <a href="/payment-files/create" class="bg-gradient-to-br from-[#0c56d0] to-[#004aba] text-white font-manrope font-bold py-3 px-6 rounded-xl shadow-lg shadow-[#0c56d0]/20 hover:opacity-95 active:scale-[0.98] transition-all flex items-center gap-2 text-sm">
+        <span class="material-symbols-outlined text-sm">add</span> Skapa ny betalfil
+      </a>
+    </section>
 
-<table class="data-table">
-  <thead>
-    <tr>
-      <th>Skapad</th>
-      <th>Filnamn</th>
-      <th>Antal transaktioner</th>
-      <th class="text-right">Totalbelopp</th>
-      <th>Exekveringsdatum</th>
-      <th>Ladda ner</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${files.length === 0 ? '<tr><td colspan="6" class="empty">Inga betalfiler skapade ännu</td></tr>' : ''}
-    ${files.map(f => `
-    <tr>
-      <td>${new Date(f.created_at).toLocaleString('sv-SE')}</td>
-      <td>${f.filename}</td>
-      <td>${f.num_transactions}</td>
-      <td class="text-right">${f.total_amount.toLocaleString('sv-SE', {minimumFractionDigits: 2})} ${f.currency}</td>
-      <td>${f.execution_date}</td>
-      <td><a href="/payment-files/${f.id}/download" class="btn-sm">Ladda ner XML</a></td>
-    </tr>
-    `).join('')}
-  </tbody>
-</table>
-`; %>
-<%- include('layouts/main', { body }) %>
+    <div class="bg-white rounded-xl overflow-hidden shadow-[0_32px_48px_-12px_rgba(41,52,58,0.06)]">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-[#f0f4f8]">
+            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Skapad</th>
+            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Filnamn</th>
+            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Transaktioner</th>
+            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-right">Totalbelopp</th>
+            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Exekveringsdatum</th>
+            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-center">Ladda ner</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#f0f4f8]">
+          <% if (files.length === 0) { %>
+            <tr><td colspan="6" class="px-6 py-12 text-center text-[#566168]">Inga betalfiler skapade annu</td></tr>
+          <% } %>
+          <% files.forEach(function(f) { %>
+            <tr class="hover:bg-[#f7f9fc] transition-colors">
+              <td class="px-6 py-5 text-sm"><%= f.created_at ? f.created_at.substring(0,10) : '-' %></td>
+              <td class="px-6 py-5 text-sm font-mono"><%= f.filename %></td>
+              <td class="px-6 py-5 text-sm"><%= f.num_transactions %></td>
+              <td class="px-6 py-5 text-sm font-bold text-right"><%= f.total_amount ? Number(f.total_amount).toFixed(2) : '-' %> <%= f.currency %></td>
+              <td class="px-6 py-5 text-sm"><%= f.execution_date %></td>
+              <td class="px-6 py-5 text-center">
+                <a href="/payment-files/<%= f.id %>/download" class="text-[#566168] hover:text-[#0c56d0] transition-colors">
+                  <span class="material-symbols-outlined">download</span>
+                </a>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>
