@@ -6,10 +6,14 @@ import { hasMessageId, createInvoice } from "../models/invoice";
 import { parseInvoicePdf } from "./pdf-parser";
 import gmailRules from "../config/gmail-rules.json";
 
+const redirectUri = process.env.RAILWAY_PUBLIC_DOMAIN
+  ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/auth/google/callback`
+  : "http://localhost:3000/auth/google/callback";
+
 const oauth2Client = new google.auth.OAuth2(
   env.gmailClientId,
   env.gmailClientSecret,
-  "http://localhost:3000/auth/google/callback"
+  redirectUri
 );
 
 oauth2Client.setCredentials({ refresh_token: env.gmailRefreshToken });
