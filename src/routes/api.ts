@@ -106,6 +106,19 @@ router.get("/export/csv", (req: Request, res: Response) => {
   res.send(csv);
 });
 
+// Re-process all invoices (clears DB, re-polls)
+router.post("/reprocess", async (_req: Request, res: Response) => {
+  try {
+    const { getDb } = require("../models/database");
+    const db = getDb();
+    db.prepare("DELETE FROM invoices").run();
+    const count = await pollGmail();
+    res.json({ success: true, cleared: true, processed: count });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Trigger Gmail poll manually
 router.post("/trigger-poll", async (_req: Request, res: Response) => {
   try {

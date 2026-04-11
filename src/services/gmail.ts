@@ -133,13 +133,20 @@ export async function pollGmail(): Promise<number> {
     // Parse PDF
     const parsed = await parseInvoicePdf(attachment.data);
 
+    // Extract invoice number from subject line (e.g. "Faktura 8/4/2026/WDT/DTF za druki...")
+    const subjectInvoiceMatch = subject.match(/Faktura\s+([\d/]+\/\w+(?:\/\w+)?)/i);
+    const invoiceNumber = parsed.invoiceNumber || (subjectInvoiceMatch ? subjectInvoiceMatch[1] : null);
+
+    // Extract vendor name from "From" header (e.g. "Zespół Fancywork DTF" <biuro@fancywork.pl>)
+    const fromName = from.replace(/<.*>/, "").replace(/"/g, "").trim();
+
     createInvoice({
       gmail_message_id: messageId,
       sender: from,
       subject: subject,
       received_at: date ? new Date(date).toISOString() : null,
-      vendor_name: parsed.vendorName || from.replace(/<.*>/, "").trim(),
-      invoice_number: parsed.invoiceNumber,
+      vendor_name: parsed.vendorName || fromName || from,
+      invoice_number: invoiceNumber,
       amount: parsed.amount,
       currency: parsed.currency || "SEK",
       due_date: parsed.dueDate,
