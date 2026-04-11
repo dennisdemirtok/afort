@@ -22,12 +22,12 @@ export const env = {
   debtorBic: process.env.DEBTOR_BIC || "NDEASESS",
   orgNumber: process.env.ORG_NUMBER || "",
 
-  // Database
+  // Database & Paths - use /data on Railway (volume mount), ./data locally
   databasePath: process.env.DATABASE_PATH || path.join(process.cwd(), "data", "invoice.db"),
 
-  // Paths
-  invoicesDir: path.join(process.cwd(), "data", "invoices"),
-  paymentFilesDir: path.join(process.cwd(), "data", "payment-files"),
+  // Paths - derive from DATABASE_PATH parent directory
+  invoicesDir: path.join(path.dirname(process.env.DATABASE_PATH || path.join(process.cwd(), "data", "invoice.db")), "invoices"),
+  paymentFilesDir: path.join(path.dirname(process.env.DATABASE_PATH || path.join(process.cwd(), "data", "invoice.db")), "payment-files"),
 
   // Claude API (optional)
   claudeApiKey: process.env.CLAUDE_API_KEY || "",
