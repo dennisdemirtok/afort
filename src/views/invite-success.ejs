@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-  <title>AFORT - Anvandare inbjuden</title>
+  <title>AFORT - Användare inbjuden</title>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
@@ -20,7 +20,7 @@
         <span class="material-symbols-outlined text-emerald-600 text-3xl">check_circle</span>
       </div>
       <h1 class="text-2xl font-extrabold font-manrope mb-2"><%= user.name %> inbjuden!</h1>
-      <p class="text-[#566168] text-sm mb-8">Konto skapat for <%= user.name %> (<%= user.email %>). Dela inloggningsuppgifterna nedan. Losenordet visas bara denna enda gang.</p>
+      <p class="text-[#566168] text-sm mb-8">Konto skapat för <%= user.name %> (<%= user.email %>). Dela inloggningsuppgifterna nedan. Lösenordet visas bara denna enda gång.</p>
 
       <div class="bg-[#f0f4f8] rounded-xl p-4 mb-4">
         <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-2">E-post</label>
@@ -30,7 +30,7 @@
       </div>
 
       <div class="bg-[#f0f4f8] rounded-xl p-4 mb-6">
-        <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-2">Tillfallslosenord</label>
+        <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-2">Tillfallslösenord</label>
         <div class="flex gap-2">
           <input type="text" id="temp-password" value="<%= tempPassword %>" readonly class="flex-grow bg-white border border-[#a8b3bb]/20 rounded-lg px-3 py-2 text-sm font-mono text-[#29343a] select-all"/>
           <button onclick="navigator.clipboard.writeText(document.getElementById('temp-password').value); this.textContent='Kopierad!'; setTimeout(() => this.innerHTML='<span class=\'material-symbols-outlined text-sm\'>content_copy</span> Kopiera', 2000)" class="bg-[#0c56d0] text-white px-4 py-2 rounded-lg text-sm font-bold hover:opacity-90 transition-all flex items-center gap-1 whitespace-nowrap">
@@ -42,12 +42,12 @@
       <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-6">
         <p class="text-xs text-amber-700">
           <span class="material-symbols-outlined text-xs align-middle">warning</span>
-          Losenordet visas bara denna enda gang. Spara det eller dela det nu.
+          Lösenordet visas bara denna enda gång. Spara det eller dela det nu.
         </p>
       </div>
 
       <a href="/settings" class="inline-flex items-center gap-2 text-[#0c56d0] font-medium text-sm hover:underline">
-        <span class="material-symbols-outlined text-sm">arrow_back</span> Tillbaka till installningar
+        <span class="material-symbols-outlined text-sm">arrow_back</span> Tillbaka till inställningar
       </a>
     </div>
   </div>

@@ -23,7 +23,7 @@
         <% var initials = (invoice.vendor_name || '??').substring(0,2).toUpperCase(); %>
         <div class="w-14 h-14 rounded-xl bg-[#0c56d0]/10 flex items-center justify-center text-[#0c56d0] font-bold text-lg font-manrope"><%= initials %></div>
         <div>
-          <h1 class="text-2xl font-extrabold font-manrope tracking-tight"><%= invoice.vendor_name || 'Okand leverantor' %></h1>
+          <h1 class="text-2xl font-extrabold font-manrope tracking-tight"><%= invoice.vendor_name || 'Okänd leverantör' %></h1>
           <p class="text-[#566168] text-sm mt-1">Faktura <%= invoice.invoice_number || '-' %></p>
         </div>
       </div>
@@ -34,7 +34,7 @@
           </a>
         <% } %>
         <% var sc = invoice.status === 'new' ? 'bg-[#0c56d0] text-white' : invoice.status === 'approved' ? 'bg-emerald-600 text-white' : invoice.status === 'exported' ? 'bg-amber-500 text-white' : 'border-2 border-emerald-600 text-emerald-600'; %>
-        <% var sl = invoice.status === 'new' ? 'Ny' : invoice.status === 'approved' ? 'Godkand' : invoice.status === 'exported' ? 'Exporterad' : 'Betald'; %>
+        <% var sl = invoice.status === 'new' ? 'Ny' : invoice.status === 'approved' ? 'Godkänd' : invoice.status === 'exported' ? 'Exporterad' : 'Betald'; %>
         <span class="inline-flex items-center px-4 py-2 rounded-full text-sm font-bold <%= sc %>"><%= sl %></span>
       </div>
     </div>
@@ -48,11 +48,11 @@
         <form method="POST" action="/invoices/<%= invoice.id %>" class="space-y-5">
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Leverantor</label>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Leverantör</label>
               <input type="text" name="vendor_name" value="<%= invoice.vendor_name || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
             </div>
             <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Fakturanr</label>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Fakturanr.</label>
               <input type="text" name="invoice_number" value="<%= invoice.invoice_number || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none font-mono"/>
             </div>
           </div>
@@ -74,14 +74,14 @@
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Forfallodatum</label>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Förfallodatum</label>
               <input type="date" name="due_date" value="<%= invoice.due_date || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
             </div>
             <div>
               <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Status</label>
               <select name="status" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none">
                 <option value="new" <%= invoice.status === 'new' ? 'selected' : '' %>>Ny</option>
-                <option value="approved" <%= invoice.status === 'approved' ? 'selected' : '' %>>Godkand</option>
+                <option value="approved" <%= invoice.status === 'approved' ? 'selected' : '' %>>Godkänd</option>
                 <option value="exported" <%= invoice.status === 'exported' ? 'selected' : '' %>>Exporterad</option>
                 <option value="paid" <%= invoice.status === 'paid' ? 'selected' : '' %>>Betald</option>
               </select>
@@ -109,7 +109,7 @@
           </div>
           <div class="pt-2">
             <button type="submit" class="bg-gradient-to-br from-[#0c56d0] to-[#004aba] text-white font-manrope font-bold py-3 px-8 rounded-xl shadow-lg shadow-[#0c56d0]/20 hover:opacity-95 active:scale-[0.98] transition-all flex items-center gap-2">
-              <span class="material-symbols-outlined text-sm">save</span> Spara andringar
+              <span class="material-symbols-outlined text-sm">save</span> Spara ändringar
             </button>
           </div>
         </form>
@@ -151,7 +151,7 @@
               <span class="font-bold"><%= invoice.amount ? Number(invoice.amount).toFixed(2) + ' ' + (invoice.currency || '') : '-' %></span>
             </div>
             <div class="flex justify-between">
-              <span class="text-[#566168]">Forfaller</span>
+              <span class="text-[#566168]">Förfaller</span>
               <span class="font-medium"><%= invoice.due_date || '-' %></span>
             </div>
             <div class="flex justify-between">

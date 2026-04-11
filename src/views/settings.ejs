@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html class="light" lang="sv">
 <head>
-  <title>AFORT - Installningar</title>
+  <title>AFORT - Inställningar</title>
   <%- include('partials/head') %>
 </head>
 <body class="flex min-h-screen">
@@ -9,8 +9,8 @@
 
   <main class="flex-grow pt-24 pb-12 px-8 ml-64 max-w-[1100px]">
     <section class="mb-10">
-      <h1 class="text-4xl font-extrabold font-manrope tracking-tight mb-2">Installningar</h1>
-      <p class="text-[#566168] text-sm">Hantera anvandare, leverantorer och systeminstellningar.</p>
+      <h1 class="text-4xl font-extrabold font-manrope tracking-tight mb-2">Inställningar</h1>
+      <p class="text-[#566168] text-sm">Hantera användare, leverantörer och systeminställningar.</p>
     </section>
 
     <% if (typeof success !== 'undefined' && success) { %>
@@ -23,12 +23,12 @@
       <!-- Users / Access -->
       <div class="bg-white rounded-xl shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 p-8">
         <h2 class="text-lg font-bold font-manrope mb-2 flex items-center gap-2">
-          <span class="material-symbols-outlined text-[#0c56d0]">group</span> Anvandare & Atkomst
+          <span class="material-symbols-outlined text-[#0c56d0]">group</span> Användare & Åtkomst
         </h2>
-        <p class="text-[#566168] text-sm mb-6">Bjud in din bokforare eller andra medarbetare. De loggar in med sin unika lanklank — inget losenord att komma ihag.</p>
+        <p class="text-[#566168] text-sm mb-6">Bjud in din bokförare eller andra medarbetare. De loggar in med sin unika länk — inget lösenord att komma ihåg.</p>
 
         <div class="mb-6">
-          <h3 class="text-sm font-semibold text-[#566168] uppercase tracking-wider mb-3">Aktiva anvandare</h3>
+          <h3 class="text-sm font-semibold text-[#566168] uppercase tracking-wider mb-3">Aktiva användare</h3>
           <div class="space-y-3">
             <% users.forEach(function(u) { %>
               <div class="flex items-center justify-between bg-[#f0f4f8] rounded-xl px-5 py-3">
@@ -41,7 +41,7 @@
                 </div>
                 <div class="flex items-center gap-3">
                   <% if (u.role !== 'admin') { %>
-                    <button onclick="navigator.clipboard.writeText(location.origin+'/invoices?token=<%= u.token %>'); this.textContent='Kopierad!'; setTimeout(() => this.textContent='Kopiera lank', 2000)" class="text-[#0c56d0] text-xs font-medium hover:underline">Kopiera lank</button>
+                    <button onclick="navigator.clipboard.writeText(location.origin+'/invoices?token=<%= u.token %>'); this.textContent='Kopierad!'; setTimeout(() => this.textContent='Kopiera länk', 2000)" class="text-[#0c56d0] text-xs font-medium hover:underline">Kopiera länk</button>
                     <form method="POST" action="/settings/users/remove" class="inline">
                       <input type="hidden" name="email" value="<%= u.email %>"/>
                       <button type="submit" class="text-red-400 hover:text-red-600 transition-colors text-xs font-medium">Ta bort</button>
@@ -56,7 +56,7 @@
         </div>
 
         <form method="POST" action="/settings/users/invite" class="border-t border-[#e8eff4] pt-6">
-          <h3 class="text-sm font-semibold text-[#566168] uppercase tracking-wider mb-3">Bjud in ny anvandare</h3>
+          <h3 class="text-sm font-semibold text-[#566168] uppercase tracking-wider mb-3">Bjud in ny användare</h3>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <input type="text" name="name" placeholder="Namn" required class="bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
             <input type="email" name="email" placeholder="E-post" required class="bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
@@ -70,9 +70,9 @@
       <!-- Supplier rules -->
       <div class="bg-white rounded-xl shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 p-8">
         <h2 class="text-lg font-bold font-manrope mb-2 flex items-center gap-2">
-          <span class="material-symbols-outlined text-[#0c56d0]">local_shipping</span> Leverantorsregler
+          <span class="material-symbols-outlined text-[#0c56d0]">local_shipping</span> Leverantörsregler
         </h2>
-        <p class="text-[#566168] text-sm mb-6">Definiera vilka avsandare som ska matchas vid Gmail-polling.</p>
+        <p class="text-[#566168] text-sm mb-6">Definiera vilka avsändare som ska matchas vid Gmail-polling.</p>
 
         <div class="space-y-3 mb-6">
           <% rules.forEach(function(r, idx) { %>
@@ -93,12 +93,12 @@
         </div>
 
         <form method="POST" action="/settings/rules/add" class="border-t border-[#e8eff4] pt-6">
-          <h3 class="text-sm font-semibold text-[#566168] uppercase tracking-wider mb-3">Lagg till leverantor</h3>
+          <h3 class="text-sm font-semibold text-[#566168] uppercase tracking-wider mb-3">Lägg till leverantör</h3>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input type="email" name="from" placeholder="avsandare@foretag.se" required class="bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
-            <input type="text" name="subject_contains" placeholder="Amne innehaller (t.ex. Faktura)" class="bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
+            <input type="email" name="from" placeholder="avsändare@företag.se" required class="bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
+            <input type="text" name="subject_contains" placeholder="Ämne innehåller (t.ex. Faktura)" class="bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
             <button type="submit" class="bg-gradient-to-br from-[#0c56d0] to-[#004aba] text-white font-manrope font-bold py-3 px-6 rounded-xl shadow-lg shadow-[#0c56d0]/20 hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-sm">
-              <span class="material-symbols-outlined text-sm">add</span> Lagg till
+              <span class="material-symbols-outlined text-sm">add</span> Lägg till
             </button>
           </div>
         </form>

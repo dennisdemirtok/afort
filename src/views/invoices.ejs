@@ -10,14 +10,14 @@
   <main class="flex-grow pt-24 pb-12 px-8 ml-64 max-w-7xl mx-auto">
     <section class="mb-10">
       <h1 class="text-4xl font-extrabold font-manrope tracking-tight mb-2">Fakturor</h1>
-      <p class="text-[#566168] text-sm">Hantera och automatisera ditt kassaflode effektivt.</p>
+      <p class="text-[#566168] text-sm">Hantera och automatisera ditt kassaflöde effektivt.</p>
     </section>
 
     <div class="flex flex-wrap gap-4 mb-8 items-center justify-between">
       <div class="bg-[#f0f4f8] p-1.5 rounded-xl flex gap-1 items-center flex-wrap">
         <a href="/invoices" class="px-5 py-2.5 rounded-lg text-sm font-semibold <% if (!filters.status) { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Alla <span class="ml-1 opacity-50"><%= counts.all %></span></a>
         <a href="/invoices?status=new" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'new') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Nya <span class="ml-1 opacity-50"><%= counts.new %></span></a>
-        <a href="/invoices?status=approved" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'approved') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Godkanda <span class="ml-1 opacity-50"><%= counts.approved %></span></a>
+        <a href="/invoices?status=approved" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'approved') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Godkända <span class="ml-1 opacity-50"><%= counts.approved %></span></a>
         <a href="/invoices?status=exported" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'exported') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Exporterade <span class="ml-1 opacity-50"><%= counts.exported %></span></a>
         <a href="/invoices?status=paid" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'paid') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Betalda <span class="ml-1 opacity-50"><%= counts.paid %></span></a>
       </div>
@@ -29,10 +29,10 @@
           <thead>
             <tr class="bg-[#f0f4f8]">
               <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Datum</th>
-              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Leverantor</th>
-              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Fakturanr</th>
+              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Leverantör</th>
+              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Fakturanr.</th>
               <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-right">Belopp</th>
-              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Forfaller</th>
+              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Förfaller</th>
               <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Status</th>
               <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-center w-20">PDF</th>
             </tr>
@@ -44,7 +44,7 @@
             <% invoices.forEach(function(inv) {
               var initials = (inv.vendor_name || '??').substring(0,2).toUpperCase();
               var sc = inv.status === 'new' ? 'bg-[#0c56d0] text-white' : inv.status === 'approved' ? 'bg-emerald-600 text-white' : inv.status === 'exported' ? 'bg-amber-500 text-white' : 'border-2 border-emerald-600 text-emerald-600';
-              var sl = inv.status === 'new' ? 'Ny' : inv.status === 'approved' ? 'Godkand' : inv.status === 'exported' ? 'Exporterad' : 'Betald';
+              var sl = inv.status === 'new' ? 'Ny' : inv.status === 'approved' ? 'Godkänd' : inv.status === 'exported' ? 'Exporterad' : 'Betald';
               var amt = inv.amount ? Number(inv.amount).toFixed(2) + ' ' + (inv.currency || '') : '-';
               var ds = inv.received_at ? inv.received_at.substring(0,10) : '-';
             %>

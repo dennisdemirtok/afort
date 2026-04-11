@@ -35,7 +35,7 @@
           <p class="text-on-surface-variant font-body text-sm tracking-wide">Faktura-automat</p>
         </div>
         <% if (error) { %>
-          <div class="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">Fel e-post eller losenord. Forsok igen.</div>
+          <div class="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">Fel e-post eller lösenord. Forsök igen.</div>
         <% } %>
         <form method="POST" action="/login" class="space-y-6">
           <div>
@@ -46,7 +46,7 @@
             </div>
           </div>
           <div>
-            <label class="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2 ml-1" for="password">Losenord</label>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2 ml-1" for="password">Lösenord</label>
             <div class="relative group">
               <input class="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl px-4 py-3.5 text-on-surface focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all duration-200 outline-none" id="password" name="password" type="password" required/>
               <span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40 group-focus-within:text-primary transition-colors">lock</span>

@@ -20,7 +20,7 @@
     <% if (invoices.length === 0) { %>
       <div class="bg-white rounded-xl p-8 shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 text-center">
         <span class="material-symbols-outlined text-4xl text-[#a8b3bb] mb-4">info</span>
-        <p class="text-[#566168]">Inga godkanda fakturor. Godkann fakturor forst.</p>
+        <p class="text-[#566168]">Inga godkända fakturor. Godkänn fakturor först.</p>
       </div>
     <% } else { %>
       <form method="POST" action="/payment-files/create">
@@ -34,10 +34,10 @@
             <thead>
               <tr class="bg-[#f0f4f8]">
                 <th class="px-6 py-4"><input type="checkbox" id="select-all" class="rounded"/></th>
-                <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Leverantor</th>
-                <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Fakturanr</th>
+                <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Leverantör</th>
+                <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Fakturanr.</th>
                 <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-right">Belopp</th>
-                <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Forfaller</th>
+                <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Förfaller</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-[#f0f4f8]">
