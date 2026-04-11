@@ -63,9 +63,20 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT,
+      link TEXT,
+      read INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
     CREATE INDEX IF NOT EXISTS idx_invoices_gmail_id ON invoices(gmail_message_id);
     CREATE INDEX IF NOT EXISTS idx_invoices_vendor ON invoices(vendor_name);
+    CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
   `);
 
   // Migration: add password_hash column if it doesn't exist (for existing databases)

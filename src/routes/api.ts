@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { listInvoices, getInvoiceById, updateInvoice, getInvoicesByIds } from "../models/invoice";
 import { listPaymentFiles, getPaymentFileById } from "../models/payment-file";
+import { getUnreadNotifications, getUnreadCount, markAllRead, markRead } from "../models/notification";
 import { generatePain001 } from "../services/pain001";
 import { pollGmail } from "../services/gmail";
 
@@ -146,6 +147,21 @@ router.post("/trigger-poll", async (_req: Request, res: Response) => {
     console.error("[Poll Error]", err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Notifications
+router.get("/notifications", (_req: Request, res: Response) => {
+  res.json({ unread: getUnreadCount(), notifications: getUnreadNotifications() });
+});
+
+router.post("/notifications/read", (_req: Request, res: Response) => {
+  markAllRead();
+  res.json({ success: true });
+});
+
+router.post("/notifications/:id/read", (req: Request, res: Response) => {
+  markRead(req.params.id);
+  res.json({ success: true });
 });
 
 export default router;

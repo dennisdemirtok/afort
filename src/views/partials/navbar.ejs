@@ -47,9 +47,86 @@
       <input class="w-full pl-10 pr-4 py-1.5 bg-slate-50 border-none rounded-lg text-sm focus:ring-1 focus:ring-blue-500/50" placeholder="Sok fakturor, leverantorer..." type="text" name="vendor"/>
     </form>
   </div>
-  <div class="flex items-center gap-4 ml-6">
+  <div class="flex items-center gap-2 ml-6">
+    <!-- Notifications bell -->
+    <div class="relative" id="notif-wrapper">
+      <button onclick="toggleNotifications()" class="p-2 text-slate-500 hover:text-blue-600 transition-colors relative">
+        <span class="material-symbols-outlined">notifications</span>
+        <span id="notif-badge" class="hidden absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">0</span>
+      </button>
+      <!-- Dropdown -->
+      <div id="notif-dropdown" class="hidden absolute right-0 top-12 w-96 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+          <span class="font-manrope text-sm font-bold text-slate-700">Notiser</span>
+          <button onclick="markAllNotificationsRead()" class="text-xs text-blue-600 hover:underline font-medium">Markera alla lasta</button>
+        </div>
+        <div id="notif-list" class="max-h-80 overflow-y-auto">
+          <div class="px-4 py-8 text-center text-slate-400 text-sm">Inga nya notiser</div>
+        </div>
+      </div>
+    </div>
     <a href="/settings" class="p-2 text-slate-500 hover:text-blue-600 transition-colors">
       <span class="material-symbols-outlined">settings</span>
     </a>
   </div>
 </header>
+
+<script>
+function toggleNotifications() {
+  document.getElementById('notif-dropdown').classList.toggle('hidden');
+}
+document.addEventListener('click', function(e) {
+  if (!document.getElementById('notif-wrapper').contains(e.target)) {
+    document.getElementById('notif-dropdown').classList.add('hidden');
+  }
+});
+
+async function loadNotifications() {
+  try {
+    const res = await fetch('/api/notifications', { headers: { 'Authorization': 'Bearer ' + (document.cookie.match(/auth_token=([^;]+)/)?.[1] || '') }});
+    const data = await res.json();
+    const badge = document.getElementById('notif-badge');
+    const list = document.getElementById('notif-list');
+
+    if (data.unread > 0) {
+      badge.textContent = data.unread > 9 ? '9+' : data.unread;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+
+    if (data.notifications.length === 0) {
+      list.innerHTML = '<div class="px-4 py-8 text-center text-slate-400 text-sm">Inga nya notiser</div>';
+      return;
+    }
+
+    list.innerHTML = data.notifications.map(function(n) {
+      var icon = n.type === 'new_invoice' ? 'receipt_long' : 'info';
+      var timeAgo = getTimeAgo(n.created_at);
+      return '<a href="' + (n.link || '#') + '" class="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors border-b border-slate-50">' +
+        '<div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 mt-0.5"><span class="material-symbols-outlined text-blue-600 text-sm">' + icon + '</span></div>' +
+        '<div class="flex-grow min-w-0"><p class="text-sm font-medium text-slate-700 truncate">' + n.title + '</p>' +
+        (n.message ? '<p class="text-xs text-slate-500 truncate">' + n.message + '</p>' : '') +
+        '<p class="text-[10px] text-slate-400 mt-0.5">' + timeAgo + '</p></div></a>';
+    }).join('');
+  } catch (e) {}
+}
+
+async function markAllNotificationsRead() {
+  await fetch('/api/notifications/read', { method: 'POST', headers: { 'Authorization': 'Bearer ' + (document.cookie.match(/auth_token=([^;]+)/)?.[1] || '') }});
+  document.getElementById('notif-badge').classList.add('hidden');
+  document.getElementById('notif-list').innerHTML = '<div class="px-4 py-8 text-center text-slate-400 text-sm">Inga nya notiser</div>';
+}
+
+function getTimeAgo(dateStr) {
+  var diff = (Date.now() - new Date(dateStr + 'Z').getTime()) / 1000;
+  if (diff < 60) return 'Just nu';
+  if (diff < 3600) return Math.floor(diff / 60) + ' min sedan';
+  if (diff < 86400) return Math.floor(diff / 3600) + ' tim sedan';
+  return Math.floor(diff / 86400) + ' dagar sedan';
+}
+
+// Load notifications on page load and poll every 60 seconds
+loadNotifications();
+setInterval(loadNotifications, 60000);
+</script>

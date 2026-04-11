@@ -4,6 +4,7 @@ import path from "path";
 import { env } from "../config/env";
 import { hasMessageId, createInvoice } from "../models/invoice";
 import { parseInvoicePdf } from "./pdf-parser";
+import { createNotification } from "../models/notification";
 import gmailRules from "../config/gmail-rules.json";
 
 const redirectUri = process.env.RAILWAY_PUBLIC_DOMAIN
@@ -220,6 +221,16 @@ export async function pollGmail(includeRead = false): Promise<number> {
     });
 
     console.log(`[Gmail] Processed: ${subject} from ${from}`);
+
+    // Create notification for new invoice
+    const amt = parsed.amount ? `${parsed.amount.toFixed(2)} ${currency}` : "";
+    createNotification(
+      "new_invoice",
+      `Ny faktura fran ${fromName}`,
+      invoiceNumber ? `${invoiceNumber}${amt ? " — " + amt : ""}` : amt || subject.substring(0, 50),
+      `/invoices`
+    );
+
     processed++;
   }
 
