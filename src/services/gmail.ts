@@ -139,7 +139,8 @@ export async function pollGmail(includeRead = false): Promise<number> {
     // BWS: "Invoice/Creditnote 16276606 from Blue Water"
     const subjectInvoiceMatch = subject.match(/Faktura\s+([\d/]+\/\w+(?:\/\w+)?)/i)
       || subject.match(/Invoice\/Creditnote\s+(\d+)/i);
-    const invoiceNumber = parsed.invoiceNumber || (subjectInvoiceMatch ? subjectInvoiceMatch[1] : null);
+    // Subject line takes priority over PDF (PDF may extract customer numbers instead)
+    const invoiceNumber = (subjectInvoiceMatch ? subjectInvoiceMatch[1] : null) || parsed.invoiceNumber;
 
     // Map email domains to company names
     const emailDomain = from.match(/@([^>]+)/)?.[1]?.toLowerCase() || "";

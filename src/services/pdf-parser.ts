@@ -61,8 +61,8 @@ function extractAmount(text: string): number | null {
 
 function extractDueDate(text: string): string | null {
   const patterns = [
-    // Polish Fancywork: "Termin płatności: 7 dni (2026-04-15)"
-    /Termin p[łl]atno[śs]ci\s*:?.*?\((\d{4}-\d{2}-\d{2})\)/i,
+    // Polish Fancywork: "Termin płatności:\n7 dni (2026-04-15)" (may be split across lines)
+    /Termin p[łl]atno[śs]ci\s*:?[\s\S]*?\((\d{4}-\d{2}-\d{2})\)/i,
     // Swedish: "Förfallodatum: 2026-04-30"
     /(?:förfallo(?:datum|dag)|förfaller|due\s*date|betalningsdag)\s*:?\s*(\d{4}-\d{2}-\d{2})/i,
     // English: "Due Date: 30/04/2026" or "Payment due: 2026-04-30"
