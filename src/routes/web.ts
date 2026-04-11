@@ -150,8 +150,9 @@ router.post("/settings/users/invite", (req: Request, res: Response) => {
   if (!name || !email) return res.redirect("/settings");
   try {
     const user = createUser(name, email);
-    // In production you'd send an email with the link. For now just redirect with success.
-    res.redirect(`/settings?success=Anvandare ${name} inbjuden! Dela denna lank: ${req.protocol}://${req.get("host")}/invoices?token=${user.token}`);
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const inviteLink = `${baseUrl}/invoices?token=${user.token}`;
+    res.render("invite-success", { user, inviteLink });
   } catch (err: any) {
     res.redirect(`/settings?success=Fel: ${err.message}`);
   }

@@ -87,7 +87,7 @@ export async function pollGmail(includeRead = false): Promise<number> {
   let processed = 0;
 
   const query = buildSearchQuery(includeRead);
-  const res = await gmail.users.messages.list({ userId: "me", q: query, maxResults: 20 });
+  const res = await gmail.users.messages.list({ userId: "me", q: query, maxResults: 100 });
 
   if (!res.data.messages || res.data.messages.length === 0) {
     console.log("[Gmail] No new messages");
@@ -137,8 +137,12 @@ export async function pollGmail(includeRead = false): Promise<number> {
     // Extract invoice number from subject line
     // Fancywork: "Faktura 8/4/2026/WDT/DTF za druki..."
     // BWS: "Invoice/Creditnote 16276606 from Blue Water"
+    // BWS Statement: "Statement of Account 2026-03-31 - Customer 181751 / DK01-MAL01"
+    // BWS Reminder: "Reminder Account 181751 ..."
     const subjectInvoiceMatch = subject.match(/Faktura\s+([\d/]+\/\w+(?:\/\w+)?)/i)
-      || subject.match(/Invoice\/Creditnote\s+(\d+)/i);
+      || subject.match(/Invoice\/Creditnote\s+(\d+)/i)
+      || subject.match(/Statement of Account\s+([\d-]+)/i)
+      || subject.match(/Reminder Account\s+(\d+)/i);
     const invoiceNumber = parsed.invoiceNumber || (subjectInvoiceMatch ? subjectInvoiceMatch[1] : null);
 
     // Extract vendor name from "From" header (e.g. "Zespół Fancywork DTF" <biuro@fancywork.pl>)

@@ -60,14 +60,17 @@
                     <p class="text-xs text-[#566168]"><%= u.email %> &middot; <%= u.role %></p>
                   </div>
                 </div>
-                <% if (u.role !== 'admin') { %>
-                  <form method="POST" action="/settings/users/remove" class="inline">
-                    <input type="hidden" name="email" value="<%= u.email %>"/>
-                    <button type="submit" class="text-red-400 hover:text-red-600 transition-colors text-xs font-medium">Ta bort</button>
-                  </form>
-                <% } else { %>
-                  <span class="text-xs text-[#566168]">Admin</span>
-                <% } %>
+                <div class="flex items-center gap-3">
+                  <% if (u.role !== 'admin') { %>
+                    <button onclick="navigator.clipboard.writeText(location.origin+'/invoices?token=<%= u.token %>'); this.textContent='Kopierad!'; setTimeout(() => this.textContent='Kopiera lank', 2000)" class="text-[#0c56d0] text-xs font-medium hover:underline">Kopiera lank</button>
+                    <form method="POST" action="/settings/users/remove" class="inline">
+                      <input type="hidden" name="email" value="<%= u.email %>"/>
+                      <button type="submit" class="text-red-400 hover:text-red-600 transition-colors text-xs font-medium">Ta bort</button>
+                    </form>
+                  <% } else { %>
+                    <span class="text-xs text-[#566168]">Admin</span>
+                  <% } %>
+                </div>
               </div>
             <% }); %>
           </div>

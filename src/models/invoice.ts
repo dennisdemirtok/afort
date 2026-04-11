@@ -83,7 +83,7 @@ export function listInvoices(filters: InvoiceFilters = {}): Invoice[] {
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-  return db.prepare(`SELECT * FROM invoices ${where} ORDER BY created_at DESC`).all(...params) as Invoice[];
+  return db.prepare(`SELECT * FROM invoices ${where} ORDER BY received_at DESC, created_at DESC`).all(...params) as Invoice[];
 }
 
 export function updateInvoice(id: string, data: Partial<Invoice>): Invoice | undefined {
