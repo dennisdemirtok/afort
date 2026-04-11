@@ -21,16 +21,6 @@
         <a href="/invoices?status=exported" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'exported') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Exporterade <span class="ml-1 opacity-50"><%= counts.exported %></span></a>
         <a href="/invoices?status=paid" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'paid') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Betalda <span class="ml-1 opacity-50"><%= counts.paid %></span></a>
       </div>
-      <form method="GET" action="/invoices" class="flex gap-2">
-        <input type="hidden" name="status" value="<%= filters.status || '' %>">
-        <div class="relative">
-          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#566168] text-lg">search</span>
-          <input class="pl-10 pr-4 py-2.5 bg-white ring-1 ring-[#a8b3bb]/20 rounded-xl focus:ring-2 focus:ring-[#0c56d0] outline-none text-sm w-56" placeholder="Sok leverantor..." name="vendor" value="<%= filters.vendor || '' %>"/>
-        </div>
-        <button type="submit" class="bg-white p-2.5 rounded-xl ring-1 ring-[#a8b3bb]/20 hover:bg-[#e8eff4]">
-          <span class="material-symbols-outlined text-[#566168]">tune</span>
-        </button>
-      </form>
     </div>
 
     <div class="bg-white rounded-xl overflow-hidden shadow-[0_32px_48px_-12px_rgba(41,52,58,0.06)]">
