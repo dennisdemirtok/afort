@@ -12,7 +12,10 @@
     },
     {
       "from": "notification@dtftransfer.com",
-      "subject_contains": "Rechnung",
+      "has_attachment": "pdf"
+    },
+    {
+      "from": "uzytkownicy@infakt.pl",
       "has_attachment": "pdf"
     },
     {
@@ -21,10 +24,6 @@
     },
     {
       "from": "danuta.lewkowicz@feelgood.pl",
-      "has_attachment": "pdf"
-    },
-    {
-      "from": "uzytkownicy@infakt.pl",
       "has_attachment": "pdf"
     },
     {

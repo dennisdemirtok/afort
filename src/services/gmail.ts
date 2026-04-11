@@ -135,18 +135,27 @@ export async function pollGmail(includeRead = false): Promise<number> {
     const parsed = await parseInvoicePdf(attachment.data);
 
     // Extract invoice number from subject line
-    // Fancywork: "Faktura 8/4/2026/WDT/DTF za druki..."
-    // BWS: "Invoice/Creditnote 16276606 from Blue Water"
-    // DTFtransfer: "Rechnung (Ref ZB/2026/03/614)"
-    // Feelgood: "Pro forma PROF 24/2026"
-    // Helios: "Faktura 39/05/2021"
-    // Aflasta/Fortnox: "Faktura 1045 bifogas"
-    const subjectInvoiceMatch = subject.match(/Faktura\s+([\d/]+\/\w+(?:\/\w+)?)/i)
+    const subjectInvoiceMatch =
+      // Fancywork: "Faktura 8/4/2026/WDT/DTF za druki..."
+      subject.match(/Faktura\s+([\d/]+\/\w+(?:\/\w+)?)\s+za/i)
+      // BWS: "Invoice/Creditnote 16276606 from Blue Water"
       || subject.match(/Invoice\/Creditnote\s+(\d+)/i)
+      // DTFtransfer new: "Rechnung (Ref ZB/2026/03/614)"
       || subject.match(/Rechnung\s+\(Ref\s+([^)]+)\)/i)
+      // DTFtransfer new: "Zahlungserinnerung (Ref ZB/2026/01/395)"
+      || subject.match(/Zahlungserinnerung\s+\(Ref\s+([^)]+)\)/i)
+      // DTFtransfer old via infakt: "Invoice 586/12/2025/ZB from DTFTRANSFER"
+      || subject.match(/Invoice\s+([\d/]+\/\w+)\s+from/i)
+      // Feelgood: "Pro forma PROF 24/2026"
       || subject.match(/Pro\s+forma\s+(PROF\s+[\d/]+)/i)
-      || subject.match(/Faktura\s+([\d/]+(?:\/[\d/]+)*)/i)
-      || subject.match(/Faktura\s+(\d+)\s+bifogas/i);
+      // Helios: "Payment of...outstanding for FV/03/26/024"
+      || subject.match(/outstanding\s+for\s+(FV\/[\d/]+)/i)
+      // Helios via infakt: "Faktura 39/05/2021 od"
+      || subject.match(/Faktura\s+([\d/]+(?:\/[\d/]+)+)\s+od/i)
+      // Aflasta/Fortnox: "Faktura 1045 bifogas"
+      || subject.match(/Faktura\s+(\d+)\s+bifogas/i)
+      // Generic fallback: "Faktura XXXX"
+      || subject.match(/Faktura\s+([\w/.-]+\d[\w/.-]*)/i);
     // Subject line takes priority over PDF (PDF may extract customer numbers instead)
     const invoiceNumber = (subjectInvoiceMatch ? subjectInvoiceMatch[1] : null) || parsed.invoiceNumber;
 
@@ -158,10 +167,28 @@ export async function pollGmail(includeRead = false): Promise<number> {
       "dtftransfer.com": "DTFtransfer.com",
       "poczta.wfirma.pl": "Feelgood SP",
       "feelgood.pl": "Feelgood SP",
-      "infakt.pl": "Helios Advertising",
       "fortnox.se": "Aflasta AB",
     };
-    const fromName = vendorMap[emailDomain] || from.replace(/<.*>/, "").replace(/"/g, "").trim();
+    // infakt.pl is shared platform — check subject to distinguish vendor
+    let fromName = vendorMap[emailDomain] || "";
+    if (emailDomain === "infakt.pl") {
+      if (/DTFTRANSFER/i.test(subject)) fromName = "DTFtransfer.com";
+      else if (/HELIOS/i.test(subject)) fromName = "Helios Advertising";
+      else fromName = from.replace(/<.*>/, "").replace(/"/g, "").trim();
+    }
+    if (!fromName) fromName = from.replace(/<.*>/, "").replace(/"/g, "").trim();
+
+    // Override currency for vendors known to invoice in EUR
+    const eurVendors = ["DTFtransfer.com", "Fancywork DTF", "Feelgood SP", "Helios Advertising"];
+    let currency = parsed.currency || "SEK";
+    if (eurVendors.includes(fromName) && (!currency || currency === "PLN")) {
+      currency = "EUR";
+    }
+    // Also try to extract amount from subject for DTFtransfer: "in Höhe von 17,98 €"
+    if (!parsed.amount && /in Höhe von\s+([\d.,]+)\s*€/i.test(subject)) {
+      const m = subject.match(/in Höhe von\s+([\d.,]+)\s*€/i);
+      if (m) parsed.amount = parseFloat(m[1].replace(",", "."));
+    }
 
     createInvoice({
       gmail_message_id: messageId,
@@ -171,7 +198,7 @@ export async function pollGmail(includeRead = false): Promise<number> {
       vendor_name: fromName,
       invoice_number: invoiceNumber,
       amount: parsed.amount,
-      currency: parsed.currency || "SEK",
+      currency,
       due_date: parsed.dueDate,
       ocr: parsed.ocr,
       bankgiro: parsed.bankgiro,
