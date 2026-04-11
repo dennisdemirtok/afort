@@ -1,0 +1,49 @@
+<% const body = `
+<div class="page-header">
+  <h1>Skapa betalfil</h1>
+  <a href="/payment-files" class="btn btn-sm btn-outline">Tillbaka</a>
+</div>
+
+${invoices.length === 0 ? '<div class="alert">Inga godkända fakturor. Godkänn fakturor först.</div>' : `
+<form method="POST" action="/payment-files/create">
+  <div class="form-group">
+    <label>Exekveringsdatum</label>
+    <input type="date" name="execution_date" value="${new Date().toISOString().split('T')[0]}" required>
+  </div>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="select-all"></th>
+        <th>Leverantör</th>
+        <th>Fakturanr</th>
+        <th class="text-right">Belopp</th>
+        <th>Förfaller</th>
+        <th>BG/OCR</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${invoices.map(inv => `
+      <tr>
+        <td><input type="checkbox" name="invoice_ids" value="${inv.id}"></td>
+        <td>${inv.vendor_name || '-'}</td>
+        <td>${inv.invoice_number || '-'}</td>
+        <td class="text-right">${inv.amount ? inv.amount.toLocaleString('sv-SE', {minimumFractionDigits: 2}) : '-'} ${inv.currency || ''}</td>
+        <td>${inv.due_date || '-'}</td>
+        <td>${inv.bankgiro || inv.ocr || '-'}</td>
+      </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <button type="submit" class="btn btn-primary">Skapa pain.001-fil</button>
+</form>
+
+<script>
+  document.getElementById('select-all').addEventListener('change', function() {
+    document.querySelectorAll('input[name="invoice_ids"]').forEach(cb => cb.checked = this.checked);
+  });
+</script>
+`}
+`; %>
+<%- include('layouts/main', { body }) %>

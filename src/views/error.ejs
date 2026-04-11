@@ -1,0 +1,8 @@
+<% const body = `
+<div class="error-page">
+  <h1>Fel</h1>
+  <p>${message}</p>
+  <a href="/invoices" class="btn btn-primary">Till fakturor</a>
+</div>
+`; %>
+<%- include('layouts/main', { body }) %>

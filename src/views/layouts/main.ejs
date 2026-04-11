@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AFORT – Faktura-automat</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <a href="/invoices">AFORT</a>
+      <span class="nav-subtitle">Faktura-automat</span>
+    </div>
+    <div class="nav-links">
+      <a href="/invoices">Fakturor</a>
+      <a href="/payment-files">Betalfiler</a>
+      <a href="/payment-files/create">Skapa betalfil</a>
+      <a href="/api/export/csv" class="btn-sm">CSV Export</a>
+      <a href="/logout" class="btn-sm btn-outline">Logga ut</a>
+    </div>
+  </nav>
+  <main class="container">
+    <%- body %>
+  </main>
+</body>
+</html>

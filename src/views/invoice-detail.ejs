@@ -1,0 +1,86 @@
+<% const body = `
+<div class="page-header">
+  <h1>Faktura: ${invoice.vendor_name || 'Okänd leverantör'}</h1>
+  <a href="/invoices" class="btn btn-sm btn-outline">Tillbaka</a>
+</div>
+
+<div class="detail-grid">
+  <div class="detail-card">
+    <h3>Fakturadata</h3>
+    <form method="POST" action="/invoices/${invoice.id}">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Leverantör</label>
+          <input type="text" name="vendor_name" value="${invoice.vendor_name || ''}">
+        </div>
+        <div class="form-group">
+          <label>Fakturanr</label>
+          <input type="text" name="invoice_number" value="${invoice.invoice_number || ''}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Belopp</label>
+          <input type="number" step="0.01" name="amount" value="${invoice.amount || ''}">
+        </div>
+        <div class="form-group">
+          <label>Valuta</label>
+          <select name="currency">
+            <option value="SEK" ${invoice.currency === 'SEK' ? 'selected' : ''}>SEK</option>
+            <option value="EUR" ${invoice.currency === 'EUR' ? 'selected' : ''}>EUR</option>
+            <option value="USD" ${invoice.currency === 'USD' ? 'selected' : ''}>USD</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Förfallodatum</label>
+          <input type="date" name="due_date" value="${invoice.due_date || ''}">
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select name="status">
+            <option value="new" ${invoice.status === 'new' ? 'selected' : ''}>Ny</option>
+            <option value="approved" ${invoice.status === 'approved' ? 'selected' : ''}>Godkänd</option>
+            <option value="exported" ${invoice.status === 'exported' ? 'selected' : ''}>Exporterad</option>
+            <option value="paid" ${invoice.status === 'paid' ? 'selected' : ''}>Betald</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>OCR</label>
+          <input type="text" name="ocr" value="${invoice.ocr || ''}">
+        </div>
+        <div class="form-group">
+          <label>Bankgiro</label>
+          <input type="text" name="bankgiro" value="${invoice.bankgiro || ''}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Plusgiro</label>
+          <input type="text" name="plusgiro" value="${invoice.plusgiro || ''}">
+        </div>
+        <div class="form-group">
+          <label>IBAN</label>
+          <input type="text" name="iban" value="${invoice.iban || ''}">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">Spara ändringar</button>
+    </form>
+  </div>
+
+  <div class="detail-card">
+    <h3>E-postinfo</h3>
+    <dl>
+      <dt>Från</dt><dd>${invoice.sender || '-'}</dd>
+      <dt>Ämne</dt><dd>${invoice.subject || '-'}</dd>
+      <dt>Mottagen</dt><dd>${invoice.received_at ? new Date(invoice.received_at).toLocaleString('sv-SE') : '-'}</dd>
+      <dt>Processad</dt><dd>${invoice.processed_at ? new Date(invoice.processed_at).toLocaleString('sv-SE') : '-'}</dd>
+    </dl>
+    ${invoice.pdf_path ? '<a href="/invoices/' + invoice.id + '/pdf" class="btn btn-sm">Ladda ner PDF</a>' : ''}
+  </div>
+</div>
+`; %>
+<%- include('layouts/main', { body }) %>

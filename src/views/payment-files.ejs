@@ -1,0 +1,33 @@
+<% const body = `
+<div class="page-header">
+  <h1>Betalfiler</h1>
+  <a href="/payment-files/create" class="btn btn-primary btn-sm">Skapa ny betalfil</a>
+</div>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Skapad</th>
+      <th>Filnamn</th>
+      <th>Antal transaktioner</th>
+      <th class="text-right">Totalbelopp</th>
+      <th>Exekveringsdatum</th>
+      <th>Ladda ner</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${files.length === 0 ? '<tr><td colspan="6" class="empty">Inga betalfiler skapade ännu</td></tr>' : ''}
+    ${files.map(f => `
+    <tr>
+      <td>${new Date(f.created_at).toLocaleString('sv-SE')}</td>
+      <td>${f.filename}</td>
+      <td>${f.num_transactions}</td>
+      <td class="text-right">${f.total_amount.toLocaleString('sv-SE', {minimumFractionDigits: 2})} ${f.currency}</td>
+      <td>${f.execution_date}</td>
+      <td><a href="/payment-files/${f.id}/download" class="btn-sm">Ladda ner XML</a></td>
+    </tr>
+    `).join('')}
+  </tbody>
+</table>
+`; %>
+<%- include('layouts/main', { body }) %>

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <title>AFORT – OAuth klar</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-box">
+      <h1>OAuth2 klar</h1>
+      <p>Spara denna refresh token som <code>GMAIL_REFRESH_TOKEN</code> miljövariabel:</p>
+      <textarea readonly style="width:100%;height:100px;font-family:monospace"><%= refreshToken %></textarea>
+      <br><br>
+      <a href="/invoices" class="btn btn-primary">Till fakturor</a>
+    </div>
+  </div>
+</body>
+</html>

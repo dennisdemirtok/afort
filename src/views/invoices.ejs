@@ -1,0 +1,57 @@
+<% const body = `
+<div class="page-header">
+  <h1>Fakturor</h1>
+  <div class="header-actions">
+    <form method="POST" action="/api/trigger-poll" style="display:inline">
+      <button type="submit" class="btn btn-sm">Hämta nya fakturor</button>
+    </form>
+  </div>
+</div>
+
+<div class="status-tabs">
+  <a href="/invoices" class="${!filters.status ? 'active' : ''}">Alla (${counts.all})</a>
+  <a href="/invoices?status=new" class="${filters.status === 'new' ? 'active' : ''}">Nya (${counts.new})</a>
+  <a href="/invoices?status=approved" class="${filters.status === 'approved' ? 'active' : ''}">Godkända (${counts.approved})</a>
+  <a href="/invoices?status=exported" class="${filters.status === 'exported' ? 'active' : ''}">Exporterade (${counts.exported})</a>
+  <a href="/invoices?status=paid" class="${filters.status === 'paid' ? 'active' : ''}">Betalda (${counts.paid})</a>
+</div>
+
+<div class="filters-bar">
+  <form method="GET" action="/invoices" class="filter-form">
+    <input type="hidden" name="status" value="${filters.status || ''}">
+    <input type="text" name="vendor" placeholder="Sök leverantör..." value="${filters.vendor || ''}">
+    <input type="date" name="date_from" value="${filters.date_from || ''}">
+    <input type="date" name="date_to" value="${filters.date_to || ''}">
+    <button type="submit" class="btn btn-sm">Filtrera</button>
+  </form>
+</div>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Datum</th>
+      <th>Leverantör</th>
+      <th>Fakturanr</th>
+      <th class="text-right">Belopp</th>
+      <th>Förfaller</th>
+      <th>Status</th>
+      <th>PDF</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${invoices.length === 0 ? '<tr><td colspan="7" class="empty">Inga fakturor hittades</td></tr>' : ''}
+    ${invoices.map(inv => `
+    <tr>
+      <td>${inv.received_at ? new Date(inv.received_at).toLocaleDateString('sv-SE') : '-'}</td>
+      <td><a href="/invoices/${inv.id}">${inv.vendor_name || '-'}</a></td>
+      <td>${inv.invoice_number || '-'}</td>
+      <td class="text-right">${inv.amount ? inv.amount.toLocaleString('sv-SE', {minimumFractionDigits: 2}) : '-'} ${inv.currency || ''}</td>
+      <td>${inv.due_date || '-'}</td>
+      <td><span class="badge badge-${inv.status}">${inv.status}</span></td>
+      <td>${inv.pdf_path ? '<a href="/invoices/' + inv.id + '/pdf" class="btn-sm">PDF</a>' : '-'}</td>
+    </tr>
+    `).join('')}
+  </tbody>
+</table>
+`; %>
+<%- include('layouts/main', { body }) %>
