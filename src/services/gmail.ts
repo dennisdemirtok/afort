@@ -137,8 +137,16 @@ export async function pollGmail(includeRead = false): Promise<number> {
     // Extract invoice number from subject line
     // Fancywork: "Faktura 8/4/2026/WDT/DTF za druki..."
     // BWS: "Invoice/Creditnote 16276606 from Blue Water"
+    // DTFtransfer: "Rechnung (Ref ZB/2026/03/614)"
+    // Feelgood: "Pro forma PROF 24/2026"
+    // Helios: "Faktura 39/05/2021"
+    // Aflasta/Fortnox: "Faktura 1045 bifogas"
     const subjectInvoiceMatch = subject.match(/Faktura\s+([\d/]+\/\w+(?:\/\w+)?)/i)
-      || subject.match(/Invoice\/Creditnote\s+(\d+)/i);
+      || subject.match(/Invoice\/Creditnote\s+(\d+)/i)
+      || subject.match(/Rechnung\s+\(Ref\s+([^)]+)\)/i)
+      || subject.match(/Pro\s+forma\s+(PROF\s+[\d/]+)/i)
+      || subject.match(/Faktura\s+([\d/]+(?:\/[\d/]+)*)/i)
+      || subject.match(/Faktura\s+(\d+)\s+bifogas/i);
     // Subject line takes priority over PDF (PDF may extract customer numbers instead)
     const invoiceNumber = (subjectInvoiceMatch ? subjectInvoiceMatch[1] : null) || parsed.invoiceNumber;
 
@@ -147,6 +155,11 @@ export async function pollGmail(includeRead = false): Promise<number> {
     const vendorMap: Record<string, string> = {
       "bws.dk": "Blue Water Shipping",
       "fancywork.pl": "Fancywork DTF",
+      "dtftransfer.com": "DTFtransfer.com",
+      "poczta.wfirma.pl": "Feelgood SP",
+      "feelgood.pl": "Feelgood SP",
+      "infakt.pl": "Helios Advertising",
+      "fortnox.se": "Aflasta AB",
     };
     const fromName = vendorMap[emailDomain] || from.replace(/<.*>/, "").replace(/"/g, "").trim();
 

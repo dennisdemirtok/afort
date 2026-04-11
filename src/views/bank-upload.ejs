@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html class="light" lang="sv">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>AFORT - Bankutdrag</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #f7f9fc; color: #29343a; }
+    .font-manrope { font-family: 'Manrope', sans-serif; }
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; display: inline-block; }
+  </style>
+</head>
+<body>
+  <header class="fixed top-0 w-full z-50 bg-[#f7f9fc] flex justify-between items-center px-8 h-20">
+    <div class="flex items-center gap-12">
+      <a href="/invoices" class="text-2xl font-bold tracking-tight font-manrope">AFORT</a>
+      <nav class="hidden md:flex gap-2 items-center">
+        <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/invoices">Fakturor</a>
+        <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/payment-files">Betalfiler</a>
+        <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/payment-files/create">Skapa betalfil</a>
+        <a class="font-manrope text-sm font-bold text-[#0c56d0] px-3 py-2 rounded-xl" href="/bank-upload">Bankutdrag</a>
+        <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/api/export/csv">CSV Export</a>
+        <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/settings">Installningar</a>
+      </nav>
+    </div>
+    <a href="/logout" class="font-manrope text-sm text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl">Logga ut</a>
+  </header>
+
+  <main class="pt-24 pb-16 px-8 max-w-5xl mx-auto">
+    <section class="mb-10">
+      <h1 class="text-4xl font-extrabold font-manrope tracking-tight mb-2">Bankutdrag</h1>
+      <p class="text-[#566168] text-sm">Ladda upp en Nordea CSV-fil for att matcha betalningar mot fakturor.</p>
+    </section>
+
+    <!-- Upload form -->
+    <div class="bg-white rounded-xl shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 p-8 mb-8">
+      <form method="POST" action="/bank-upload" enctype="multipart/form-data" class="flex flex-col sm:flex-row gap-4 items-end">
+        <div class="flex-grow">
+          <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-2" for="csvfile">Nordea CSV-fil</label>
+          <input type="file" name="csvfile" id="csvfile" accept=".csv" required class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-[#0c56d0] file:text-white hover:file:opacity-90"/>
+        </div>
+        <button type="submit" class="bg-[#0c56d0] text-white font-manrope font-bold px-6 py-3 rounded-xl shadow-lg shadow-[#0c56d0]/20 hover:opacity-95 transition-all flex items-center gap-2 whitespace-nowrap">
+          <span class="material-symbols-outlined text-lg">upload_file</span>
+          Ladda upp & matcha
+        </button>
+      </form>
+    </div>
+
+    <% if (matches && matches.length > 0) { %>
+    <!-- Matched invoices -->
+    <div class="bg-white rounded-xl shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 p-8 mb-8">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-bold font-manrope flex items-center gap-2">
+          <span class="material-symbols-outlined text-emerald-500">check_circle</span>
+          Matchade betalningar (<%= matches.length %>)
+        </h2>
+      </div>
+
+      <form method="POST" action="/bank-upload/apply">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs uppercase tracking-wider text-[#566168] border-b border-[#e8eff4]">
+                <th class="pb-3 pr-4">Fakturanr</th>
+                <th class="pb-3 pr-4">Leverantor</th>
+                <th class="pb-3 pr-4">Fakturabelopp</th>
+                <th class="pb-3 pr-4">Betalt belopp</th>
+                <th class="pb-3 pr-4">Betalningsdatum</th>
+                <th class="pb-3 pr-4">Meddelande</th>
+                <th class="pb-3">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% matches.forEach(function(m) { %>
+              <tr class="border-b border-[#e8eff4]/60 hover:bg-[#f7f9fc]">
+                <td class="py-3 pr-4 font-mono text-xs">
+                  <a href="/invoices/<%= m.invoice.id %>" class="text-[#0c56d0] hover:underline"><%= m.invoice.invoice_number %></a>
+                  <input type="hidden" name="invoice_ids" value="<%= m.invoice.id %>"/>
+                </td>
+                <td class="py-3 pr-4"><%= m.invoice.vendor_name %></td>
+                <td class="py-3 pr-4 font-mono"><%= m.invoice.amount ? m.invoice.amount.toFixed(2) : '-' %> <%= m.invoice.currency %></td>
+                <td class="py-3 pr-4 font-mono"><%= m.amount.toFixed(2) %></td>
+                <td class="py-3 pr-4"><%= m.date %></td>
+                <td class="py-3 pr-4 text-xs text-[#566168]"><%= m.bankRow['Meddelande'] %></td>
+                <td class="py-3">
+                  <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
+                    <span class="material-symbols-outlined text-xs">check</span> Matchad
+                  </span>
+                </td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-6 flex justify-end">
+          <button type="submit" class="bg-emerald-600 text-white font-manrope font-bold px-6 py-3 rounded-xl shadow-lg shadow-emerald-600/20 hover:opacity-95 transition-all flex items-center gap-2">
+            <span class="material-symbols-outlined text-lg">payments</span>
+            Markera som betalda
+          </button>
+        </div>
+      </form>
+    </div>
+    <% } %>
+
+    <% if (unmatched && unmatched.length > 0) { %>
+    <!-- Unmatched transactions -->
+    <div class="bg-white rounded-xl shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 p-8">
+      <h2 class="text-xl font-bold font-manrope mb-6 flex items-center gap-2">
+        <span class="material-symbols-outlined text-amber-500">help</span>
+        Omatchade transaktioner (<%= unmatched.length %>)
+      </h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-xs uppercase tracking-wider text-[#566168] border-b border-[#e8eff4]">
+              <th class="pb-3 pr-4">Datum</th>
+              <th class="pb-3 pr-4">Namn</th>
+              <th class="pb-3 pr-4">Belopp</th>
+              <th class="pb-3 pr-4">Meddelande</th>
+              <th class="pb-3">Ytterligare detaljer</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% unmatched.forEach(function(u) { %>
+            <tr class="border-b border-[#e8eff4]/60 hover:bg-[#f7f9fc]">
+              <td class="py-3 pr-4"><%= u.date %></td>
+              <td class="py-3 pr-4"><%= u.bankRow['Namn'] %></td>
+              <td class="py-3 pr-4 font-mono"><%= u.amount.toFixed(2) %></td>
+              <td class="py-3 pr-4 text-xs text-[#566168]"><%= u.bankRow['Meddelande'] %></td>
+              <td class="py-3 text-xs text-[#566168]"><%= u.bankRow['Ytterligare detaljer'] || '' %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <% } %>
+
+    <% if (matches === null) { %>
+    <div class="text-center py-16 text-[#566168]">
+      <span class="material-symbols-outlined text-5xl mb-4 block opacity-30">account_balance</span>
+      <p class="text-sm">Ladda upp en CSV-fil fran Nordea for att borja matcha betalningar.</p>
+    </div>
+    <% } %>
+
+    <% if (matches && matches.length === 0 && unmatched && unmatched.length === 0) { %>
+    <div class="text-center py-16 text-[#566168]">
+      <span class="material-symbols-outlined text-5xl mb-4 block opacity-30">search_off</span>
+      <p class="text-sm">Inga utgaende betalningar hittades i CSV-filen.</p>
+    </div>
+    <% } %>
+  </main>
+</body>
+</html>

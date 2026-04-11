@@ -1,14 +1,17 @@
 import { Router, Request, Response } from "express";
+import multer from "multer";
 import { listInvoices, getInvoiceById, updateInvoice, getInvoicesByIds } from "../models/invoice";
 import { listPaymentFiles, getPaymentFileById } from "../models/payment-file";
-import { createUser, listUsers, removeUserByEmail, ensureAdminExists } from "../models/user";
+import { createUserWithPassword, listUsers, removeUserByEmail, ensureAdminExists, verifyPassword, generatePassword } from "../models/user";
 import { generatePain001 } from "../services/pain001";
 import { getAuthUrl, exchangeCode } from "../services/gmail";
 import { env } from "../config/env";
+import { getDb } from "../models/database";
 import fs from "fs";
 import path from "path";
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Login page
 router.get("/login", (req: Request, res: Response) => {
@@ -16,10 +19,23 @@ router.get("/login", (req: Request, res: Response) => {
 });
 
 router.post("/login", (req: Request, res: Response) => {
-  if (req.body.password === env.authToken) {
+  const { email, password } = req.body;
+
+  // Try email+password auth first
+  if (email && password) {
+    const user = verifyPassword(email, password);
+    if (user) {
+      res.cookie("auth_token", user.token, { httpOnly: true, sameSite: "strict", maxAge: 7 * 24 * 60 * 60 * 1000 });
+      return res.redirect("/invoices");
+    }
+  }
+
+  // Backward compat: password-only with authToken
+  if (!email && password && password === env.authToken) {
     res.cookie("auth_token", env.authToken, { httpOnly: true, sameSite: "strict", maxAge: 7 * 24 * 60 * 60 * 1000 });
     return res.redirect("/invoices");
   }
+
   res.redirect("/login?error=1");
 });
 
@@ -149,10 +165,9 @@ router.post("/settings/users/invite", (req: Request, res: Response) => {
   const { name, email } = req.body;
   if (!name || !email) return res.redirect("/settings");
   try {
-    const user = createUser(name, email);
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const inviteLink = `${baseUrl}/invoices?token=${user.token}`;
-    res.render("invite-success", { user, inviteLink });
+    const tempPassword = generatePassword();
+    const user = createUserWithPassword(name, email, tempPassword);
+    res.render("invite-success", { user, tempPassword });
   } catch (err: any) {
     res.redirect(`/settings?success=Fel: ${err.message}`);
   }
@@ -178,6 +193,125 @@ router.post("/settings/rules/remove", (req: Request, res: Response) => {
   if (idx >= 0 && idx < rules.length) rules.splice(idx, 1);
   saveRules(rules);
   res.redirect("/settings?success=Leverantor borttagen");
+});
+
+// ==================== Bank Upload ====================
+
+function parseCsvRows(csvText: string): Record<string, string>[] {
+  const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(";").map(h => h.trim());
+  const rows: Record<string, string>[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(";");
+    const row: Record<string, string> = {};
+    for (let j = 0; j < headers.length; j++) {
+      row[headers[j]] = (cols[j] || "").trim();
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function parseSwedishAmount(val: string): number {
+  // "-2159,86" -> -2159.86
+  return parseFloat(val.replace(/\s/g, "").replace(",", "."));
+}
+
+function normalizeInvoiceNumber(num: string): string {
+  return num.replace(/\s+/g, "").toLowerCase();
+}
+
+router.get("/bank-upload", (_req: Request, res: Response) => {
+  res.render("bank-upload", { matches: null, unmatched: null });
+});
+
+router.post("/bank-upload", upload.single("csvfile"), (req: Request, res: Response) => {
+  if (!req.file) return res.redirect("/bank-upload");
+
+  const csvText = req.file.buffer.toString("utf-8");
+  const rows = parseCsvRows(csvText);
+
+  const db = getDb();
+  const allInvoices = db.prepare("SELECT * FROM invoices WHERE status != 'paid'").all() as any[];
+
+  // Build a map of normalized invoice numbers to invoices
+  const invoiceMap = new Map<string, any>();
+  for (const inv of allInvoices) {
+    if (inv.invoice_number) {
+      invoiceMap.set(normalizeInvoiceNumber(inv.invoice_number), inv);
+    }
+  }
+
+  const matches: { invoice: any; bankRow: Record<string, string>; amount: number; date: string }[] = [];
+  const unmatched: { bankRow: Record<string, string>; amount: number; date: string }[] = [];
+
+  for (const row of rows) {
+    const belopp = parseSwedishAmount(row["Belopp"] || "0");
+    if (belopp >= 0) continue; // Only outgoing payments
+
+    const meddelande = (row["Meddelande"] || "").trim();
+    const datum = (row["Datum"] || "").trim();
+    const amount = Math.abs(belopp);
+
+    if (!meddelande) {
+      unmatched.push({ bankRow: row, amount, date: datum });
+      continue;
+    }
+
+    // Try to match message against invoice numbers
+    // Strip "NR: " prefix for Fancywork
+    let msg = meddelande.replace(/^NR:\s*/i, "").trim();
+
+    let found = false;
+
+    // Direct match
+    const normalized = normalizeInvoiceNumber(msg);
+    if (invoiceMap.has(normalized)) {
+      matches.push({ invoice: invoiceMap.get(normalized)!, bankRow: row, amount, date: datum });
+      found = true;
+    }
+
+    // Try partial matching: check if message contains an invoice number or vice versa
+    if (!found) {
+      for (const [key, inv] of invoiceMap.entries()) {
+        if (normalized.includes(key) || key.includes(normalized)) {
+          matches.push({ invoice: inv, bankRow: row, amount, date: datum });
+          found = true;
+          break;
+        }
+      }
+    }
+
+    // Try matching individual words/tokens in the message
+    if (!found) {
+      const tokens = msg.split(/[\s,;]+/).filter(t => t.length >= 3);
+      for (const token of tokens) {
+        const normToken = normalizeInvoiceNumber(token);
+        if (invoiceMap.has(normToken)) {
+          matches.push({ invoice: invoiceMap.get(normToken)!, bankRow: row, amount, date: datum });
+          found = true;
+          break;
+        }
+      }
+    }
+
+    if (!found) {
+      unmatched.push({ bankRow: row, amount, date: datum });
+    }
+  }
+
+  res.render("bank-upload", { matches, unmatched });
+});
+
+router.post("/bank-upload/apply", (req: Request, res: Response) => {
+  const ids = req.body.invoice_ids;
+  if (!ids) return res.redirect("/bank-upload");
+  const idList = Array.isArray(ids) ? ids : [ids];
+  for (const id of idList) {
+    updateInvoice(id, { status: "paid" });
+  }
+  res.redirect("/invoices?status=paid");
 });
 
 export default router;

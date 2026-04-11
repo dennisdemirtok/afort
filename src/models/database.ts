@@ -58,6 +58,7 @@ function initSchema() {
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       token TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
       role TEXT DEFAULT 'viewer',
       created_at TEXT DEFAULT (datetime('now'))
     );
@@ -66,4 +67,10 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_invoices_gmail_id ON invoices(gmail_message_id);
     CREATE INDEX IF NOT EXISTS idx_invoices_vendor ON invoices(vendor_name);
   `);
+
+  // Migration: add password_hash column if it doesn't exist (for existing databases)
+  const cols = db.pragma("table_info(users)") as { name: string }[];
+  if (!cols.some(c => c.name === "password_hash")) {
+    db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT");
+  }
 }

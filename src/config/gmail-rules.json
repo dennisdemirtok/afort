@@ -9,6 +9,31 @@
       "from": "ivni@bws.dk",
       "subject_contains": "Invoice/Creditnote",
       "has_attachment": "pdf"
+    },
+    {
+      "from": "notification@dtftransfer.com",
+      "subject_contains": "Rechnung",
+      "has_attachment": "pdf"
+    },
+    {
+      "from": "no-reply@poczta.wfirma.pl",
+      "subject_contains": "Feelgood",
+      "has_attachment": "pdf"
+    },
+    {
+      "from": "danuta.lewkowicz@feelgood.pl",
+      "subject_contains": "Feelgood",
+      "has_attachment": "pdf"
+    },
+    {
+      "from": "uzytkownicy@infakt.pl",
+      "subject_contains": "HELIOS",
+      "has_attachment": "pdf"
+    },
+    {
+      "from": "faktura-no-reply@fortnox.se",
+      "subject_contains": "Aflasta",
+      "has_attachment": "pdf"
     }
   ],
   "label_after_process": "Processed/Invoices",
