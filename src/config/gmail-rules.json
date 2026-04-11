@@ -1,13 +1,8 @@
 {
   "rules": [
     {
-      "from": "faktura@leverantor.se",
+      "from": "biuro@fancywork.pl",
       "subject_contains": "Faktura",
-      "has_attachment": "pdf"
-    },
-    {
-      "from": "billing@supplier.com",
-      "subject_regex": "Invoice #\\d+",
       "has_attachment": "pdf"
     }
   ],
