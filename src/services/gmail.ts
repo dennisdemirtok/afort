@@ -151,7 +151,7 @@ export async function pollGmail(includeRead = false): Promise<number> {
     const invoiceNumber = (subjectInvoiceMatch ? subjectInvoiceMatch[1] : null) || parsed.invoiceNumber;
 
     // Map email domains to company names
-    const emailDomain = from.match(/@([^>]+)/)?.[1]?.toLowerCase() || "";
+    const emailDomain = from.match(/@([\w.-]+)/)?.[1]?.toLowerCase() || "";
     const vendorMap: Record<string, string> = {
       "bws.dk": "Blue Water Shipping",
       "fancywork.pl": "Fancywork DTF",
