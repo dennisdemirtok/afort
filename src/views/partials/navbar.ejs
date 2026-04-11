@@ -1,14 +1,55 @@
-<header class="fixed top-0 w-full z-50 bg-[#f7f9fc] flex justify-between items-center px-8 h-20">
-  <div class="flex items-center gap-12">
-    <a href="/invoices" class="text-2xl font-bold tracking-tight font-manrope">AFORT</a>
-    <nav class="hidden md:flex gap-2 items-center">
-      <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/invoices">Fakturor</a>
-      <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/payment-files">Betalfiler</a>
-      <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/payment-files/create">Skapa betalfil</a>
-      <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/bank-upload">Bankutdrag</a>
-      <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/api/export/csv">CSV Export</a>
-      <a class="font-manrope text-sm font-medium text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl" href="/settings">Installningar</a>
-    </nav>
+<aside class="h-screen w-64 fixed left-0 top-0 border-r-0 bg-slate-50 flex flex-col py-8 px-4 z-50">
+  <div class="mb-10 px-2">
+    <div class="flex flex-col">
+      <a href="/invoices" class="text-2xl font-bold tracking-tight text-blue-700 font-manrope">AFORT</a>
+      <span class="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Faktura-automat</span>
+    </div>
   </div>
-  <a href="/logout" class="font-manrope text-sm text-[#29343a]/60 hover:bg-[#e8eff4] px-3 py-2 rounded-xl">Logga ut</a>
+  <nav class="flex-grow space-y-1">
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95" href="/invoices">
+      <span class="material-symbols-outlined text-[22px]">receipt_long</span>
+      <span class="font-manrope text-sm font-medium">Fakturor</span>
+    </a>
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95" href="/payment-files">
+      <span class="material-symbols-outlined text-[22px]">account_balance_wallet</span>
+      <span class="font-manrope text-sm font-medium">Betalfiler</span>
+    </a>
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95" href="/payment-files/create">
+      <span class="material-symbols-outlined text-[22px]">add_card</span>
+      <span class="font-manrope text-sm font-medium">Skapa betalfil</span>
+    </a>
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95" href="/bank-upload">
+      <span class="material-symbols-outlined text-[22px]">account_balance</span>
+      <span class="font-manrope text-sm font-medium">Bankutdrag</span>
+    </a>
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95" href="/api/export/csv">
+      <span class="material-symbols-outlined text-[22px]">description</span>
+      <span class="font-manrope text-sm font-medium">CSV Export</span>
+    </a>
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-600 hover:text-blue-600 hover:bg-slate-100 active:scale-95" href="/settings">
+      <span class="material-symbols-outlined text-[22px]">settings</span>
+      <span class="font-manrope text-sm font-medium">Installningar</span>
+    </a>
+  </nav>
+  <div class="mt-auto space-y-2">
+    <div class="pt-4 border-t border-slate-200">
+      <a class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-600 hover:text-red-500 hover:bg-red-50 active:scale-95" href="/logout">
+        <span class="material-symbols-outlined text-[22px]">logout</span>
+        <span class="font-manrope text-sm font-medium">Logga ut</span>
+      </a>
+    </div>
+  </div>
+</aside>
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-white/80 backdrop-blur-xl border-b border-slate-100 flex items-center justify-between px-8 z-40">
+  <div class="flex items-center gap-4 flex-grow max-w-xl">
+    <form method="GET" action="/invoices" class="relative w-full">
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+      <input class="w-full pl-10 pr-4 py-1.5 bg-slate-50 border-none rounded-lg text-sm focus:ring-1 focus:ring-blue-500/50" placeholder="Sok fakturor, leverantorer..." type="text" name="vendor"/>
+    </form>
+  </div>
+  <div class="flex items-center gap-4 ml-6">
+    <a href="/settings" class="p-2 text-slate-500 hover:text-blue-600 transition-colors">
+      <span class="material-symbols-outlined">settings</span>
+    </a>
+  </div>
 </header>
