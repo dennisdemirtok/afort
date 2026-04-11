@@ -1,57 +1,74 @@
 <% const body = `
-<div class="page-header">
-  <h1>Fakturor</h1>
-  <div class="header-actions">
-    <form method="POST" action="/api/trigger-poll" style="display:inline">
-      <button type="submit" class="btn btn-sm">Hämta nya fakturor</button>
+<section class="mb-12">
+  <h1 class="text-4xl font-extrabold font-manrope tracking-tight mb-2">Fakturor</h1>
+  <p class="text-[#566168] text-sm">Hantera och automatisera ditt kassaflode effektivt.</p>
+</section>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 items-end">
+  <div class="lg:col-span-8 bg-[#f0f4f8] p-1.5 rounded-xl flex gap-1 items-center flex-wrap">
+    <a href="/invoices" class="px-5 py-2.5 rounded-lg text-sm font-semibold ${!filters.status ? 'bg-white shadow-sm text-[#0c56d0]' : 'text-[#566168] hover:bg-[#e8eff4]'} transition-all">Alla <span class="ml-1 opacity-50">${counts.all}</span></a>
+    <a href="/invoices?status=new" class="px-5 py-2.5 rounded-lg text-sm font-medium ${filters.status === 'new' ? 'bg-white shadow-sm text-[#0c56d0]' : 'text-[#566168] hover:bg-[#e8eff4]'} transition-all">Nya <span class="ml-1 opacity-50">${counts.new}</span></a>
+    <a href="/invoices?status=approved" class="px-5 py-2.5 rounded-lg text-sm font-medium ${filters.status === 'approved' ? 'bg-white shadow-sm text-[#0c56d0]' : 'text-[#566168] hover:bg-[#e8eff4]'} transition-all">Godkanda <span class="ml-1 opacity-50">${counts.approved}</span></a>
+    <a href="/invoices?status=exported" class="px-5 py-2.5 rounded-lg text-sm font-medium ${filters.status === 'exported' ? 'bg-white shadow-sm text-[#0c56d0]' : 'text-[#566168] hover:bg-[#e8eff4]'} transition-all">Exporterade <span class="ml-1 opacity-50">${counts.exported}</span></a>
+    <a href="/invoices?status=paid" class="px-5 py-2.5 rounded-lg text-sm font-medium ${filters.status === 'paid' ? 'bg-white shadow-sm text-[#0c56d0]' : 'text-[#566168] hover:bg-[#e8eff4]'} transition-all">Betalda <span class="ml-1 opacity-50">${counts.paid}</span></a>
+  </div>
+  <div class="lg:col-span-4 flex gap-3">
+    <form method="GET" action="/invoices" class="relative flex-grow flex gap-2">
+      <input type="hidden" name="status" value="${filters.status || ''}">
+      <div class="relative flex-grow">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#566168] text-lg">search</span>
+        <input class="w-full pl-10 pr-4 py-2.5 bg-white border-none ring-1 ring-[#a8b3bb]/20 rounded-xl focus:ring-2 focus:ring-[#0c56d0] focus:outline-none transition-all text-sm" placeholder="Sok leverantor..." type="text" name="vendor" value="${filters.vendor || ''}"/>
+      </div>
+      <button type="submit" class="flex items-center justify-center bg-white p-2.5 rounded-xl ring-1 ring-[#a8b3bb]/20 hover:bg-[#e8eff4] transition-all">
+        <span class="material-symbols-outlined text-[#566168]">tune</span>
+      </button>
     </form>
   </div>
 </div>
 
-<div class="status-tabs">
-  <a href="/invoices" class="${!filters.status ? 'active' : ''}">Alla (${counts.all})</a>
-  <a href="/invoices?status=new" class="${filters.status === 'new' ? 'active' : ''}">Nya (${counts.new})</a>
-  <a href="/invoices?status=approved" class="${filters.status === 'approved' ? 'active' : ''}">Godkända (${counts.approved})</a>
-  <a href="/invoices?status=exported" class="${filters.status === 'exported' ? 'active' : ''}">Exporterade (${counts.exported})</a>
-  <a href="/invoices?status=paid" class="${filters.status === 'paid' ? 'active' : ''}">Betalda (${counts.paid})</a>
+<div class="bg-white rounded-xl overflow-hidden shadow-[0_32px_48px_-12px_rgba(41,52,58,0.06)]">
+  <div class="overflow-x-auto">
+    <table class="w-full text-left border-collapse">
+      <thead>
+        <tr class="bg-[#f0f4f8]">
+          <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Datum</th>
+          <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Leverantor</th>
+          <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Fakturanr</th>
+          <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-right">Belopp</th>
+          <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Forfaller</th>
+          <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Status</th>
+          <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-center w-20">PDF</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-[#f0f4f8]">
+        ${invoices.length === 0 ? '<tr><td colspan="7" class="px-6 py-12 text-center text-[#566168]">Inga fakturor hittades</td></tr>' : ''}
+        ${invoices.map(inv => {
+          const initials = (inv.vendor_name || '??').split(' ').map(w => w[0]).join('').substring(0,2).toUpperCase();
+          const statusClass = inv.status === 'new' ? 'bg-[#0c56d0] text-white' : inv.status === 'approved' ? 'bg-emerald-600 text-white' : inv.status === 'exported' ? 'bg-amber-500 text-white' : 'border-2 border-emerald-600 text-emerald-600';
+          const statusLabel = inv.status === 'new' ? 'Ny' : inv.status === 'approved' ? 'Godkand' : inv.status === 'exported' ? 'Exporterad' : 'Betald';
+          const amt = inv.amount ? inv.amount.toLocaleString('sv-SE', {minimumFractionDigits: 2}) + ' ' + (inv.currency || '') : '-';
+          return '<tr class="group hover:bg-[#f7f9fc] transition-colors cursor-pointer" onclick="location.href=\\'/invoices/' + inv.id + '\\'">' +
+            '<td class="px-6 py-5 text-sm">' + (inv.received_at ? new Date(inv.received_at).toLocaleDateString('sv-SE') : '-') + '</td>' +
+            '<td class="px-6 py-5"><div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-[#0c56d0]/10 flex items-center justify-center text-[#0c56d0] font-bold text-xs">' + initials + '</div><span class="text-sm font-semibold">' + (inv.vendor_name || '-') + '</span></div></td>' +
+            '<td class="px-6 py-5 text-sm font-mono text-[#566168]">' + (inv.invoice_number || '-') + '</td>' +
+            '<td class="px-6 py-5 text-sm font-bold text-right">' + amt + '</td>' +
+            '<td class="px-6 py-5 text-sm text-[#566168]">' + (inv.due_date || '-') + '</td>' +
+            '<td class="px-6 py-5"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ' + statusClass + '">' + statusLabel + '</span></td>' +
+            '<td class="px-6 py-5 text-center">' + (inv.pdf_path ? '<a href="/invoices/' + inv.id + '/pdf" class="text-[#566168] hover:text-[#0c56d0] transition-colors"><span class="material-symbols-outlined">picture_as_pdf</span></a>' : '-') + '</td>' +
+          '</tr>';
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+  <div class="px-6 py-4 bg-[#f0f4f8] flex justify-between items-center border-t border-[#e8eff4]">
+    <span class="text-xs text-[#566168] font-medium">Visar ${invoices.length} fakturor</span>
+    <form method="POST" action="/api/trigger-poll">
+      <button type="submit" class="bg-gradient-to-br from-[#0c56d0] to-[#004aba] text-white shadow-lg flex items-center gap-2 pl-4 pr-5 py-2 rounded-full hover:scale-105 active:scale-95 transition-all text-sm font-manrope font-bold">
+        <span class="material-symbols-outlined text-sm">refresh</span>
+        Hamta nya
+      </button>
+    </form>
+  </div>
 </div>
-
-<div class="filters-bar">
-  <form method="GET" action="/invoices" class="filter-form">
-    <input type="hidden" name="status" value="${filters.status || ''}">
-    <input type="text" name="vendor" placeholder="Sök leverantör..." value="${filters.vendor || ''}">
-    <input type="date" name="date_from" value="${filters.date_from || ''}">
-    <input type="date" name="date_to" value="${filters.date_to || ''}">
-    <button type="submit" class="btn btn-sm">Filtrera</button>
-  </form>
-</div>
-
-<table class="data-table">
-  <thead>
-    <tr>
-      <th>Datum</th>
-      <th>Leverantör</th>
-      <th>Fakturanr</th>
-      <th class="text-right">Belopp</th>
-      <th>Förfaller</th>
-      <th>Status</th>
-      <th>PDF</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${invoices.length === 0 ? '<tr><td colspan="7" class="empty">Inga fakturor hittades</td></tr>' : ''}
-    ${invoices.map(inv => `
-    <tr>
-      <td>${inv.received_at ? new Date(inv.received_at).toLocaleDateString('sv-SE') : '-'}</td>
-      <td><a href="/invoices/${inv.id}">${inv.vendor_name || '-'}</a></td>
-      <td>${inv.invoice_number || '-'}</td>
-      <td class="text-right">${inv.amount ? inv.amount.toLocaleString('sv-SE', {minimumFractionDigits: 2}) : '-'} ${inv.currency || ''}</td>
-      <td>${inv.due_date || '-'}</td>
-      <td><span class="badge badge-${inv.status}">${inv.status}</span></td>
-      <td>${inv.pdf_path ? '<a href="/invoices/' + inv.id + '/pdf" class="btn-sm">PDF</a>' : '-'}</td>
-    </tr>
-    `).join('')}
-  </tbody>
-</table>
 `; %>
 <%- include('layouts/main', { body }) %>

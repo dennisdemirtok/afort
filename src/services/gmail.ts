@@ -146,7 +146,7 @@ export async function pollGmail(includeRead = false): Promise<number> {
       sender: from,
       subject: subject,
       received_at: date ? new Date(date).toISOString() : null,
-      vendor_name: parsed.vendorName || fromName || from,
+      vendor_name: fromName || parsed.vendorName || from,
       invoice_number: invoiceNumber,
       amount: parsed.amount,
       currency: parsed.currency || "SEK",
