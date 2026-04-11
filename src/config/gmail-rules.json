@@ -4,6 +4,11 @@
       "from": "biuro@fancywork.pl",
       "subject_contains": "Faktura",
       "has_attachment": "pdf"
+    },
+    {
+      "from": "ivni@bws.dk",
+      "subject_contains": "Invoice/Creditnote",
+      "has_attachment": "pdf"
     }
   ],
   "label_after_process": "Processed/Invoices",

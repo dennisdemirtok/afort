@@ -134,8 +134,11 @@ export async function pollGmail(includeRead = false): Promise<number> {
     // Parse PDF
     const parsed = await parseInvoicePdf(attachment.data);
 
-    // Extract invoice number from subject line (e.g. "Faktura 8/4/2026/WDT/DTF za druki...")
-    const subjectInvoiceMatch = subject.match(/Faktura\s+([\d/]+\/\w+(?:\/\w+)?)/i);
+    // Extract invoice number from subject line
+    // Fancywork: "Faktura 8/4/2026/WDT/DTF za druki..."
+    // BWS: "Invoice/Creditnote 16276606 from Blue Water"
+    const subjectInvoiceMatch = subject.match(/Faktura\s+([\d/]+\/\w+(?:\/\w+)?)/i)
+      || subject.match(/Invoice\/Creditnote\s+(\d+)/i);
     const invoiceNumber = parsed.invoiceNumber || (subjectInvoiceMatch ? subjectInvoiceMatch[1] : null);
 
     // Extract vendor name from "From" header (e.g. "Zespół Fancywork DTF" <biuro@fancywork.pl>)

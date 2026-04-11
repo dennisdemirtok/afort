@@ -1,10 +1,12 @@
 import { Router, Request, Response } from "express";
 import { listInvoices, getInvoiceById, updateInvoice, getInvoicesByIds } from "../models/invoice";
 import { listPaymentFiles, getPaymentFileById } from "../models/payment-file";
+import { createUser, listUsers, removeUserByEmail, ensureAdminExists } from "../models/user";
 import { generatePain001 } from "../services/pain001";
 import { getAuthUrl, exchangeCode } from "../services/gmail";
 import { env } from "../config/env";
 import fs from "fs";
+import path from "path";
 
 const router = Router();
 
@@ -121,6 +123,60 @@ router.get("/payment-files/:id/download", (req: Request, res: Response) => {
   const pf = getPaymentFileById(req.params.id);
   if (!pf || !fs.existsSync(pf.file_path)) return res.status(404).render("error", { message: "Fil hittades inte" });
   res.download(pf.file_path, pf.filename);
+});
+
+// Settings
+function loadRules(): any[] {
+  const rulesPath = path.join(__dirname, "..", "config", "gmail-rules.json");
+  try { return JSON.parse(fs.readFileSync(rulesPath, "utf-8")).rules; } catch { return []; }
+}
+
+function saveRules(rules: any[]) {
+  const rulesPath = path.join(__dirname, "..", "config", "gmail-rules.json");
+  const data = JSON.parse(fs.readFileSync(rulesPath, "utf-8"));
+  data.rules = rules;
+  fs.writeFileSync(rulesPath, JSON.stringify(data, null, 2), "utf-8");
+}
+
+router.get("/settings", (req: Request, res: Response) => {
+  ensureAdminExists(env.authToken);
+  const users = listUsers();
+  const rules = loadRules();
+  res.render("settings", { users, rules, success: req.query.success || null });
+});
+
+router.post("/settings/users/invite", (req: Request, res: Response) => {
+  const { name, email } = req.body;
+  if (!name || !email) return res.redirect("/settings");
+  try {
+    const user = createUser(name, email);
+    // In production you'd send an email with the link. For now just redirect with success.
+    res.redirect(`/settings?success=Anvandare ${name} inbjuden! Dela denna lank: ${req.protocol}://${req.get("host")}/invoices?token=${user.token}`);
+  } catch (err: any) {
+    res.redirect(`/settings?success=Fel: ${err.message}`);
+  }
+});
+
+router.post("/settings/users/remove", (req: Request, res: Response) => {
+  removeUserByEmail(req.body.email);
+  res.redirect("/settings?success=Anvandare borttagen");
+});
+
+router.post("/settings/rules/add", (req: Request, res: Response) => {
+  const rules = loadRules();
+  const newRule: any = { from: req.body.from, has_attachment: "pdf" };
+  if (req.body.subject_contains) newRule.subject_contains = req.body.subject_contains;
+  rules.push(newRule);
+  saveRules(rules);
+  res.redirect("/settings?success=Leverantor tillagd");
+});
+
+router.post("/settings/rules/remove", (req: Request, res: Response) => {
+  const rules = loadRules();
+  const idx = parseInt(req.body.index, 10);
+  if (idx >= 0 && idx < rules.length) rules.splice(idx, 1);
+  saveRules(rules);
+  res.redirect("/settings?success=Leverantor borttagen");
 });
 
 export default router;
