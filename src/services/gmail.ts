@@ -20,8 +20,9 @@ oauth2Client.setCredentials({ refresh_token: env.gmailRefreshToken });
 
 const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-function buildSearchQuery(): string {
-  const parts = ["is:unread", "has:attachment", "filename:pdf"];
+function buildSearchQuery(includeRead = false): string {
+  const parts = ["has:attachment", "filename:pdf"];
+  if (!includeRead) parts.unshift("is:unread");
   const fromAddresses = gmailRules.rules.map((r) => r.from).filter(Boolean);
   if (fromAddresses.length > 0) {
     parts.push(`{${fromAddresses.map((a) => `from:${a}`).join(" ")}}`);
@@ -81,11 +82,11 @@ async function downloadPdfAttachment(
   return null;
 }
 
-export async function pollGmail(): Promise<number> {
-  console.log(`[Gmail] Polling at ${new Date().toISOString()}`);
+export async function pollGmail(includeRead = false): Promise<number> {
+  console.log(`[Gmail] Polling at ${new Date().toISOString()} (includeRead: ${includeRead})`);
   let processed = 0;
 
-  const query = buildSearchQuery();
+  const query = buildSearchQuery(includeRead);
   const res = await gmail.users.messages.list({ userId: "me", q: query, maxResults: 20 });
 
   if (!res.data.messages || res.data.messages.length === 0) {

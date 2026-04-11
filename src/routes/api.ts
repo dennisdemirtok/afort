@@ -112,7 +112,7 @@ router.post("/reprocess", async (_req: Request, res: Response) => {
     const { getDb } = require("../models/database");
     const db = getDb();
     db.prepare("DELETE FROM invoices").run();
-    const count = await pollGmail();
+    const count = await pollGmail(true);
     res.json({ success: true, cleared: true, processed: count });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
