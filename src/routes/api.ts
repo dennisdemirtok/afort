@@ -106,14 +106,32 @@ router.get("/export/csv", (req: Request, res: Response) => {
   res.send(csv);
 });
 
-// Re-process all invoices (clears DB, re-polls)
+// Re-process all invoices (preserves paid/approved status)
 router.post("/reprocess", async (_req: Request, res: Response) => {
   try {
     const { getDb } = require("../models/database");
     const db = getDb();
+
+    // Save statuses that aren't "new" (paid, approved, exported)
+    const savedStatuses = db.prepare(
+      "SELECT gmail_message_id, status, payment_file_id FROM invoices WHERE status != 'new'"
+    ).all() as { gmail_message_id: string; status: string; payment_file_id: string | null }[];
+
     db.prepare("DELETE FROM invoices").run();
     const count = await pollGmail(true);
-    res.json({ success: true, cleared: true, processed: count });
+
+    // Restore saved statuses
+    let restored = 0;
+    for (const s of savedStatuses) {
+      if (s.gmail_message_id) {
+        const result = db.prepare(
+          "UPDATE invoices SET status = ?, payment_file_id = ? WHERE gmail_message_id = ?"
+        ).run(s.status, s.payment_file_id, s.gmail_message_id);
+        if (result.changes > 0) restored++;
+      }
+    }
+
+    res.json({ success: true, processed: count, restored });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
