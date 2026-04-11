@@ -42,13 +42,13 @@ async function getOrCreateLabel(labelName: string): Promise<string> {
 }
 
 function matchesRules(from: string, subject: string): boolean {
-  return gmailRules.rules.some((rule) => {
+  return gmailRules.rules.some((rule: any) => {
     const fromMatch = !rule.from || from.toLowerCase().includes(rule.from.toLowerCase());
     let subjectMatch = true;
-    if ("subject_contains" in rule && rule.subject_contains) {
+    if (rule.subject_contains) {
       subjectMatch = subject.toLowerCase().includes(rule.subject_contains.toLowerCase());
     }
-    if ("subject_regex" in rule && rule.subject_regex) {
+    if (rule.subject_regex) {
       subjectMatch = new RegExp(rule.subject_regex).test(subject);
     }
     return fromMatch && subjectMatch;
