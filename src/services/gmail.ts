@@ -92,7 +92,7 @@ export async function pollGmail(includeRead = false): Promise<number> {
   let processed = 0;
 
   const query = buildSearchQuery(includeRead);
-  const res = await gmail.users.messages.list({ userId: "me", q: query, maxResults: 100 });
+  const res = await gmail.users.messages.list({ userId: "me", q: query, maxResults: 500 });
 
   if (!res.data.messages || res.data.messages.length === 0) {
     console.log("[Gmail] No new messages");
