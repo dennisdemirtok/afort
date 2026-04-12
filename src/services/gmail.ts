@@ -61,7 +61,9 @@ async function downloadPdfAttachment(
   parts: gmail_v1.Schema$MessagePart[]
 ): Promise<{ filename: string; data: Buffer } | null> {
   for (const part of parts) {
-    if (part.mimeType === "application/pdf" && part.body?.attachmentId) {
+    const isPdf = part.mimeType === "application/pdf"
+      || (part.mimeType === "application/octet-stream" && part.filename?.toLowerCase().endsWith(".pdf"));
+    if (isPdf && part.body?.attachmentId) {
       const attachment = await gmail.users.messages.attachments.get({
         userId: "me",
         messageId,
