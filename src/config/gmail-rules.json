@@ -34,6 +34,10 @@
     {
       "from": "faktura-no-reply@fortnox.se",
       "has_attachment": "pdf"
+    },
+    {
+      "from": "agnieszka@sitodrukowy.pl",
+      "has_attachment": "pdf"
     }
   ],
   "label_after_process": "Processed/Invoices",

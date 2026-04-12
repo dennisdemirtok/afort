@@ -23,23 +23,36 @@
       </div>
     </div>
 
+    <!-- Bulk action toolbar (hidden by default, shown when items selected) -->
+    <div id="bulk-toolbar" class="hidden mb-4 bg-white rounded-xl shadow-lg border border-blue-200 px-6 py-3 flex items-center justify-between">
+      <span class="text-sm font-medium text-slate-700"><span id="selected-count">0</span> markerade</span>
+      <div class="flex items-center gap-2">
+        <button onclick="bulkAction('approved')" class="px-3 py-1.5 text-xs font-bold bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors">Godkänn</button>
+        <button onclick="bulkAction('paid')" class="px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors">Markera betald</button>
+        <button onclick="bulkAction('new')" class="px-3 py-1.5 text-xs font-bold bg-slate-50 text-slate-700 rounded-lg hover:bg-slate-100 transition-colors">Återställ</button>
+        <div class="w-px h-6 bg-slate-200 mx-1"></div>
+        <button onclick="bulkAction('delete')" class="px-3 py-1.5 text-xs font-bold bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">Radera</button>
+      </div>
+    </div>
+
     <div class="bg-white rounded-xl overflow-hidden shadow-[0_32px_48px_-12px_rgba(41,52,58,0.06)]">
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse">
           <thead>
             <tr class="bg-[#f0f4f8]">
-              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Datum</th>
-              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Leverantör</th>
-              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Fakturanr.</th>
-              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-right">Belopp</th>
-              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Förfaller</th>
-              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Status</th>
-              <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-center w-20">PDF</th>
+              <th class="px-4 py-4 w-10"><input type="checkbox" id="select-all" class="rounded border-slate-300" onchange="toggleAll(this)"/></th>
+              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Datum</th>
+              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Leverantör</th>
+              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Fakturanr.</th>
+              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-right">Belopp</th>
+              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Förfaller</th>
+              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Status</th>
+              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-center w-16">PDF</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-[#f0f4f8]">
             <% if (invoices.length === 0) { %>
-              <tr><td colspan="7" class="px-6 py-12 text-center text-[#566168]">Inga fakturor hittades</td></tr>
+              <tr><td colspan="8" class="px-6 py-12 text-center text-[#566168]">Inga fakturor hittades</td></tr>
             <% } %>
             <% invoices.forEach(function(inv) {
               var initials = (inv.vendor_name || '??').substring(0,2).toUpperCase();
@@ -48,19 +61,20 @@
               var amt = inv.amount ? Number(inv.amount).toFixed(2) + ' ' + (inv.currency || '') : '-';
               var ds = inv.received_at ? inv.received_at.substring(0,10) : '-';
             %>
-            <tr class="group hover:bg-[#f7f9fc] transition-colors cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'">
-              <td class="px-6 py-5 text-sm"><%= ds %></td>
-              <td class="px-6 py-5">
+            <tr class="group hover:bg-[#f7f9fc] transition-colors">
+              <td class="px-4 py-5" onclick="event.stopPropagation()"><input type="checkbox" class="inv-check rounded border-slate-300" value="<%= inv.id %>" onchange="updateToolbar()"/></td>
+              <td class="px-4 py-5 text-sm cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'"><%= ds %></td>
+              <td class="px-4 py-5 cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'">
                 <div class="flex items-center gap-3">
                   <div class="w-8 h-8 rounded-lg bg-[#0c56d0]/10 flex items-center justify-center text-[#0c56d0] font-bold text-xs"><%= initials %></div>
                   <span class="text-sm font-semibold"><%= inv.vendor_name || '-' %></span>
                 </div>
               </td>
-              <td class="px-6 py-5 text-sm font-mono text-[#566168]"><%= inv.invoice_number || '-' %></td>
-              <td class="px-6 py-5 text-sm font-bold text-right"><%= amt %></td>
-              <td class="px-6 py-5 text-sm text-[#566168]"><%= inv.due_date || '-' %></td>
-              <td class="px-6 py-5"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold <%= sc %>"><%= sl %></span></td>
-              <td class="px-6 py-5 text-center">
+              <td class="px-4 py-5 text-sm font-mono text-[#566168] cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'"><%= inv.invoice_number || '-' %></td>
+              <td class="px-4 py-5 text-sm font-bold text-right cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'"><%= amt %></td>
+              <td class="px-4 py-5 text-sm text-[#566168] cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'"><%= inv.due_date || '-' %></td>
+              <td class="px-4 py-5 cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold <%= sc %>"><%= sl %></span></td>
+              <td class="px-4 py-5 text-center">
                 <% if (inv.pdf_path) { %>
                   <a href="/invoices/<%= inv.id %>/pdf" class="text-[#566168] hover:text-[#0c56d0] transition-colors" onclick="event.stopPropagation()"><span class="material-symbols-outlined">picture_as_pdf</span></a>
                 <% } else { %>-<% } %>
@@ -75,5 +89,44 @@
       </div>
     </div>
   </main>
+
+<script>
+function getSelectedIds() {
+  return Array.from(document.querySelectorAll('.inv-check:checked')).map(function(cb) { return cb.value; });
+}
+
+function updateToolbar() {
+  var ids = getSelectedIds();
+  var toolbar = document.getElementById('bulk-toolbar');
+  var count = document.getElementById('selected-count');
+  if (ids.length > 0) {
+    toolbar.classList.remove('hidden');
+    count.textContent = ids.length;
+  } else {
+    toolbar.classList.add('hidden');
+  }
+}
+
+function toggleAll(master) {
+  document.querySelectorAll('.inv-check').forEach(function(cb) { cb.checked = master.checked; });
+  updateToolbar();
+}
+
+async function bulkAction(action) {
+  var ids = getSelectedIds();
+  if (ids.length === 0) return;
+  var label = action === 'delete' ? 'Radera ' + ids.length + ' fakturor?' : 'Ändra status för ' + ids.length + ' fakturor?';
+  if (!confirm(label)) return;
+
+  var token = document.cookie.match(/auth_token=([^;]+)/)?.[1] || '';
+  var res = await fetch('/api/invoices/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify({ ids: ids, action: action })
+  });
+  if (res.ok) location.reload();
+  else alert('Något gick fel');
+}
+</script>
 </body>
 </html>

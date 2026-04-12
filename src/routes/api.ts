@@ -35,6 +35,35 @@ router.patch("/invoices/:id", (req: Request, res: Response) => {
   res.json(invoice);
 });
 
+// Delete invoice
+router.delete("/invoices/:id", (req: Request, res: Response) => {
+  const { getDb } = require("../models/database");
+  const db = getDb();
+  db.prepare("DELETE FROM invoices WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
+});
+
+// Bulk actions
+router.post("/invoices/bulk", (req: Request, res: Response) => {
+  const { ids, action } = req.body;
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "ids required" });
+  }
+  const { getDb } = require("../models/database");
+  const db = getDb();
+  const placeholders = ids.map(() => "?").join(",");
+
+  if (action === "delete") {
+    db.prepare(`DELETE FROM invoices WHERE id IN (${placeholders})`).run(...ids);
+    res.json({ success: true, deleted: ids.length });
+  } else if (["new", "approved", "exported", "paid"].includes(action)) {
+    db.prepare(`UPDATE invoices SET status = ? WHERE id IN (${placeholders})`).run(action, ...ids);
+    res.json({ success: true, updated: ids.length, status: action });
+  } else {
+    res.status(400).json({ error: "Invalid action" });
+  }
+});
+
 // Download PDF
 router.get("/invoices/:id/pdf", (req: Request, res: Response) => {
   const invoice = getInvoiceById(req.params.id);

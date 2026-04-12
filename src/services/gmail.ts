@@ -191,6 +191,7 @@ export async function pollGmail(includeRead = false): Promise<number> {
       "poczta.wfirma.pl": "Feelgood SP",
       "feelgood.pl": "Feelgood SP",
       "fortnox.se": "Aflasta AB",
+      "sitodrukowy.pl": "Helios Advertising",
     };
     // infakt.pl is shared platform — check subject to distinguish vendor
     let fromName = vendorMap[emailDomain] || "";
