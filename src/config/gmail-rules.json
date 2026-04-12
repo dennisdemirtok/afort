@@ -11,6 +11,11 @@
       "has_attachment": "pdf"
     },
     {
+      "from": "NoReply@bws.dk",
+      "subject_contains": "Invoice/Creditnote",
+      "has_attachment": "pdf"
+    },
+    {
       "from": "notification@dtftransfer.com",
       "has_attachment": "pdf"
     },
