@@ -11,7 +11,7 @@
       "has_attachment": "pdf"
     },
     {
-      "from": "NoReply@bws.dk",
+      "from": "noreply@bws.dk",
       "subject_contains": "Invoice/Creditnote",
       "has_attachment": "pdf"
     },
