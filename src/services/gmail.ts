@@ -21,15 +21,6 @@ oauth2Client.setCredentials({ refresh_token: env.gmailRefreshToken });
 
 const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-function buildSearchQuery(includeRead = false): string {
-  const parts = ["has:attachment", "filename:pdf"];
-  if (!includeRead) parts.unshift("is:unread");
-  const fromAddresses = gmailRules.rules.map((r) => r.from).filter(Boolean);
-  if (fromAddresses.length > 0) {
-    parts.push(`{${fromAddresses.map((a) => `from:${a}`).join(" ")}}`);
-  }
-  return parts.join(" ");
-}
 
 async function getOrCreateLabel(labelName: string): Promise<string> {
   const res = await gmail.users.labels.list({ userId: "me" });
@@ -91,17 +82,42 @@ export async function pollGmail(includeRead = false): Promise<number> {
   console.log(`[Gmail] Polling at ${new Date().toISOString()} (includeRead: ${includeRead})`);
   let processed = 0;
 
-  const query = buildSearchQuery(includeRead);
-  const res = await gmail.users.messages.list({ userId: "me", q: query, maxResults: 500 });
+  // Search per sender to avoid Gmail API limitations with large OR groups
+  const fromAddresses = gmailRules.rules.map((r: any) => r.from).filter(Boolean);
+  const uniqueFroms = [...new Set(fromAddresses)];
 
-  if (!res.data.messages || res.data.messages.length === 0) {
+  let allMessages: { id: string; threadId: string }[] = [];
+  const seenIds = new Set<string>();
+
+  for (const fromAddr of uniqueFroms) {
+    const parts = ["has:attachment", "filename:pdf", `from:${fromAddr}`];
+    if (!includeRead) parts.unshift("is:unread");
+    const query = parts.join(" ");
+    try {
+      const res = await gmail.users.messages.list({ userId: "me", q: query, maxResults: 100 });
+      if (res.data.messages) {
+        for (const msg of res.data.messages) {
+          if (!seenIds.has(msg.id!)) {
+            seenIds.add(msg.id!);
+            allMessages.push({ id: msg.id!, threadId: msg.threadId! });
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[Gmail] Error searching from:${fromAddr}:`, err);
+    }
+  }
+
+  if (allMessages.length === 0) {
     console.log("[Gmail] No new messages");
     return 0;
   }
 
+  console.log(`[Gmail] Found ${allMessages.length} messages across ${uniqueFroms.length} senders`);
+
   const labelId = await getOrCreateLabel(gmailRules.label_after_process);
 
-  for (const msg of res.data.messages) {
+  for (const msg of allMessages) {
     const messageId = msg.id!;
 
     if (hasMessageId(messageId)) {
