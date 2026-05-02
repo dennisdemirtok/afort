@@ -2,9 +2,11 @@ import express from "express";
 import path from "path";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
+import cron from "node-cron";
 import { env } from "./config/env";
 import { getDb } from "./models/database";
 import { requireAuth } from "./middleware/auth";
+import { pollGmail } from "./services/gmail";
 import apiRoutes from "./routes/api";
 import webRoutes from "./routes/web";
 
@@ -46,7 +48,27 @@ app.use("/", webRoutes);
 app.listen(env.port, () => {
   console.log(`[AFORT] Server running on port ${env.port}`);
   console.log(`[AFORT] Environment: ${env.nodeEnv}`);
+
+  // Start automatic Gmail polling every 15 minutes
+  cron.schedule("*/15 * * * *", async () => {
+    try {
+      const count = await pollGmail();
+      if (count > 0) console.log(`[Cron] Polled ${count} new invoices`);
+    } catch (err) {
+      console.error("[Cron] Poll failed:", err);
+    }
+  });
+  console.log("[AFORT] Gmail polling scheduled every 15 minutes");
+
+  // Run initial poll on startup (after 10 sec delay to let server stabilize)
+  setTimeout(async () => {
+    try {
+      const count = await pollGmail();
+      console.log(`[AFORT] Initial poll: ${count} new invoices`);
+    } catch (err) {
+      console.error("[AFORT] Initial poll failed:", err);
+    }
+  }, 10000);
 });
 
 export default app;
-// deploy trigger 1775918238
