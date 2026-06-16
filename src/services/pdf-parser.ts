@@ -30,6 +30,15 @@ export async function parseInvoicePdf(pdfBuffer: Buffer): Promise<ParsedInvoice>
 }
 
 function extractAmount(text: string): number | null {
+  // BWS: "Amount\n3.070,96 SEK0,00 SEK0,00 SEK3.070,96 SEK" — last number on the line after "Amount"
+  // The line after "Amount" has 4 SEK amounts concatenated, last one is the total
+  const bwsAmountMatch = text.match(/\bAmount\s*\n\s*([\d.,]+)\s*SEK[\d.,]*\s*SEK[\d.,]*\s*SEK([\d.,]+)\s*SEK/i);
+  if (bwsAmountMatch) {
+    const numStr = bwsAmountMatch[2].replace(/\./g, "").replace(",", ".");
+    const val = parseFloat(numStr);
+    if (!isNaN(val) && val > 0) return val;
+  }
+
   const patterns = [
     // Polish Fancywork: "DO ZAPŁATY: €52,48" or "POZOSTAŁO DO ZAPŁATY: €52,48"
     /(?:DO ZAPŁATY|POZOSTAŁO DO ZAPŁATY)\s*:?\s*€?\s*([\d\s]+[.,]\d{2})/i,
