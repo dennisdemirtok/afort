@@ -70,13 +70,18 @@ export function removeUserByEmail(email: string): void {
 
 export function ensureAdminExists(adminToken: string): void {
   const db = getDb();
-  const existing = db.prepare("SELECT 1 FROM users WHERE role = 'admin'").get();
+  const password_hash = bcrypt.hashSync(adminToken, 10);
+  const existing = db.prepare("SELECT id, password_hash FROM users WHERE email = 'admin@afort.local'").get() as { id: string; password_hash: string | null } | undefined;
+
   if (!existing) {
+    // No admin yet — create one
     const id = uuidv4();
-    const password_hash = bcrypt.hashSync(adminToken, 10);
-    db.prepare("INSERT OR IGNORE INTO users (id, name, email, token, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)").run(
+    db.prepare("INSERT INTO users (id, name, email, token, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)").run(
       id, "Admin", "admin@afort.local", adminToken, password_hash, "admin"
     );
+  } else if (!existing.password_hash) {
+    // Admin exists but has no password (created before password auth) — set it now
+    db.prepare("UPDATE users SET password_hash = ?, token = ? WHERE id = ?").run(password_hash, adminToken, existing.id);
   }
 }
 
