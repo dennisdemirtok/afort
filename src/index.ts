@@ -7,6 +7,7 @@ import { env } from "./config/env";
 import { getDb } from "./models/database";
 import { requireAuth } from "./middleware/auth";
 import { pollGmail } from "./services/gmail";
+import { ensureAdminExists } from "./models/user";
 import apiRoutes from "./routes/api";
 import webRoutes from "./routes/web";
 
@@ -25,8 +26,9 @@ app.use("/api/", rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-// Initialize DB
+// Initialize DB and ensure admin account exists
 getDb();
+ensureAdminExists(env.authToken);
 
 // Public routes
 app.get("/login", (req, res, next) => next());
