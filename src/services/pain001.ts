@@ -1,10 +1,31 @@
 import { create } from "xmlbuilder2";
 import fs from "fs";
 import path from "path";
-import { v4 as uuidv4 } from "uuid";
 import { env } from "../config/env";
 import { Invoice } from "../models/invoice";
 import { createPaymentFile } from "../models/payment-file";
+
+/** Why an invoice cannot be paid through a payment file, or null when it can. */
+export function paymentBlocker(inv: Invoice): string | null {
+  if (inv.amount == null || inv.amount <= 0) return "Belopp saknas";
+  if (!inv.iban && !inv.bankgiro && !inv.plusgiro) return "Betalkonto saknas (IBAN, bankgiro eller plusgiro)";
+  return null;
+}
+
+/** Returns human readable problems; an empty list means the file can be created. */
+export function validateForPayment(invoices: Invoice[]): string[] {
+  const problems: string[] = [];
+  if (invoices.length === 0) problems.push("Inga fakturor valda.");
+  for (const inv of invoices) {
+    const blocker = paymentBlocker(inv);
+    if (blocker) problems.push(`${inv.vendor_name || "Okänd"} ${inv.invoice_number || ""}: ${blocker}.`);
+  }
+  const currencies = [...new Set(invoices.map((i) => i.currency || "SEK"))];
+  if (currencies.length > 1) {
+    problems.push(`En betalfil kan bara innehålla en valuta (valda: ${currencies.join(", ")}). Skapa en fil per valuta.`);
+  }
+  return problems;
+}
 
 export function generatePain001(invoices: Invoice[], executionDate: string) {
   const msgId = `BATCH-${executionDate}-${Date.now().toString(36)}`;
@@ -100,7 +121,7 @@ export function generatePain001(invoices: Invoice[], executionDate: string) {
     file_path: filePath,
     num_transactions: invoices.length,
     total_amount: totalAmount,
-    currency: "SEK",
+    currency: invoices[0]?.currency || "SEK",
     execution_date: executionDate,
   });
 

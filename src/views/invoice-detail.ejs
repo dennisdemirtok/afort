@@ -1,171 +1,196 @@
-<!DOCTYPE html>
-<html class="light" lang="sv">
-<head>
-  <title>AFORT - Faktura <%= invoice.invoice_number || '' %></title>
-  <%- include('partials/head') %>
-</head>
-<body class="flex min-h-screen">
-  <%- include('partials/navbar') %>
+<%- include('partials/head', { title: (invoice.vendor_name || 'Faktura') + (invoice.invoice_number ? ' ' + invoice.invoice_number : '') }) %>
+<%- include('partials/shell-top') %>
+<%
+  var isAdmin = user.role === 'admin';
+  var overdue = h.isOverdue(invoice);
+  // The natural next step for each status
+  var nextStep = {
+    new: { status: 'approved', label: 'Godkänn', icon: 'task_alt', cls: 'btn-primary' },
+    approved: { status: 'paid', label: 'Markera som betald', icon: 'paid', cls: 'btn-success' },
+    exported: { status: 'paid', label: 'Markera som betald', icon: 'paid', cls: 'btn-success' },
+  }[invoice.status];
+  var currencies = ['SEK', 'EUR', 'DKK', 'NOK', 'USD', 'GBP', 'PLN'];
+  if (invoice.currency && currencies.indexOf(invoice.currency) === -1) currencies.push(invoice.currency);
+%>
 
-  <main class="flex-grow pt-24 pb-12 px-8 ml-64 max-w-5xl mx-auto">
-    <!-- Breadcrumb -->
-    <div class="mb-8 flex items-center gap-2 text-sm text-[#566168]">
-      <a href="/invoices" class="hover:text-[#0c56d0] transition-colors flex items-center gap-1">
-        <span class="material-symbols-outlined text-sm">arrow_back</span> Fakturor
-      </a>
-      <span>/</span>
-      <span class="text-[#29343a] font-medium"><%= invoice.invoice_number || invoice.id.substring(0,8) %></span>
+<nav class="mb-6 flex items-center gap-2 text-sm text-ink-muted" aria-label="Brödsmulor">
+  <a href="/invoices" class="flex items-center gap-1 hover:text-primary"><span class="icon icon-sm">arrow_back</span>Fakturor</a>
+  <span>/</span>
+  <span class="font-medium text-ink"><%= invoice.invoice_number || 'Utan nummer' %></span>
+</nav>
+
+<div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+  <div class="flex items-center gap-4">
+    <span class="avatar h-12 w-12 rounded-xl text-base"><%= h.initials(invoice.vendor_name) %></span>
+    <div>
+      <h1 class="text-2xl font-extrabold tracking-tight"><%= invoice.vendor_name || 'Okänd leverantör' %></h1>
+      <p class="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+        <span class="font-mono"><%= invoice.invoice_number || 'Fakturanummer saknas' %></span>
+        <span class="badge badge-<%= invoice.status %>"><%= h.statusLabel(invoice.status) %></span>
+        <% if (overdue) { %><span class="badge badge-overdue"><span class="icon icon-sm">warning</span>Förfallen sedan <%= h.daysOverdue(invoice.due_date) %> dagar</span><% } %>
+        <% if (invoice.status === 'paid' && invoice.paid_at) { %><span>Betald <%= invoice.paid_at %></span><% } %>
+      </p>
     </div>
+  </div>
 
-    <!-- Header -->
-    <div class="flex items-start justify-between mb-8">
-      <div class="flex items-center gap-4">
-        <% var initials = (invoice.vendor_name || '??').substring(0,2).toUpperCase(); %>
-        <div class="w-14 h-14 rounded-xl bg-[#0c56d0]/10 flex items-center justify-center text-[#0c56d0] font-bold text-lg font-manrope"><%= initials %></div>
+  <div class="flex flex-wrap items-center gap-2">
+    <% if (nextStep) { %>
+      <form method="POST" action="/invoices/<%= invoice.id %>/status">
+        <input type="hidden" name="status" value="<%= nextStep.status %>"/>
+        <button type="submit" class="btn <%= nextStep.cls %>"><span class="icon"><%= nextStep.icon %></span><%= nextStep.label %></button>
+      </form>
+    <% } else { %>
+      <form method="POST" action="/invoices/<%= invoice.id %>/status">
+        <input type="hidden" name="status" value="approved"/>
+        <button type="submit" class="btn btn-secondary"><span class="icon">undo</span>Ångra betald</button>
+      </form>
+    <% } %>
+    <% if (hasPdf) { %>
+      <a href="/invoices/<%= invoice.id %>/pdf" class="btn btn-secondary"><span class="icon">download</span>Ladda ner PDF</a>
+    <% } %>
+    <% if (isAdmin) { %>
+      <form method="POST" action="/invoices/<%= invoice.id %>/delete" data-confirm="Radera fakturan? Den hämtas inte in igen från Gmail.">
+        <button type="submit" class="btn btn-danger" aria-label="Radera faktura"><span class="icon">delete</span></button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<% if (duplicates.length) { %>
+  <div class="flash flash-info">
+    <span class="icon">content_copy</span>
+    <span>
+      Det finns <%= duplicates.length === 1 ? 'en annan rad' : duplicates.length + ' andra rader' %> med samma fakturanummer från <%= invoice.vendor_name %>:
+      <% duplicates.forEach(function (d, i) { %><a class="font-semibold underline" href="/invoices/<%= d.id %>"><%= h.date(d.received_at) %> (<%= h.statusLabel(d.status).toLowerCase() %>)</a><%= i < duplicates.length - 1 ? ', ' : '' %><% }); %>.
+      Ofta är det en påminnelse eller ett vidarebefordrat mail.
+    </span>
+  </div>
+<% } %>
+
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-5">
+  <!-- PDF -->
+  <section class="card overflow-hidden xl:col-span-3" aria-label="Fakturans PDF">
+    <% if (hasPdf) { %>
+      <iframe id="pdf-frame" src="/invoices/<%= invoice.id %>/pdf?inline=1#view=FitH" title="Faktura-PDF" class="h-[70vh] min-h-[480px] w-full xl:h-[calc(100vh-17rem)]"></iframe>
+      <div id="pdf-fallback" class="hidden h-72 flex-col items-center justify-center px-6 text-center">
+        <span class="icon icon-xl mb-3 text-ink-faint/60">picture_as_pdf</span>
+        <p class="font-display font-bold">Förhandsvisning stöds inte i den här webbläsaren</p>
+        <p class="mt-1 text-sm text-ink-muted">Öppna PDF:en i en ny flik i stället.</p>
+      </div>
+      <div class="flex items-center justify-end border-t border-line bg-surface-low px-4 py-2">
+        <a href="/invoices/<%= invoice.id %>/pdf?inline=1" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"><span class="icon icon-sm">open_in_new</span>Öppna i ny flik</a>
+      </div>
+      <script>
+        if (navigator.pdfViewerEnabled === false) {
+          document.getElementById('pdf-frame').remove();
+          var fallback = document.getElementById('pdf-fallback');
+          fallback.classList.remove('hidden');
+          fallback.classList.add('flex');
+        }
+      </script>
+    <% } else { %>
+      <div class="flex h-72 flex-col items-center justify-center px-6 text-center">
+        <span class="icon icon-xl mb-3 text-ink-faint/60">scan_delete</span>
+        <p class="font-display font-bold">Ingen PDF sparad</p>
+        <p class="mt-1 max-w-sm text-sm text-ink-muted">Filen finns inte på servern. En administratör kan läsa om fakturorna från Gmail under Inställningar.</p>
+      </div>
+    <% } %>
+  </section>
+
+  <!-- Data -->
+  <div class="space-y-6 xl:col-span-2">
+    <section class="card p-6">
+      <h2 class="section-title mb-5"><span class="icon text-primary">edit_note</span>Fakturauppgifter</h2>
+      <form method="POST" action="/invoices/<%= invoice.id %>" class="space-y-4">
         <div>
-          <h1 class="text-2xl font-extrabold font-manrope tracking-tight"><%= invoice.vendor_name || 'Okänd leverantör' %></h1>
-          <p class="text-[#566168] text-sm mt-1">Faktura <%= invoice.invoice_number || '-' %></p>
+          <label class="label" for="vendor_name">Leverantör</label>
+          <input class="input" type="text" id="vendor_name" name="vendor_name" value="<%= invoice.vendor_name || '' %>"/>
         </div>
-      </div>
-      <div class="flex items-center gap-3">
-        <% if (invoice.pdf_path) { %>
-          <a href="/invoices/<%= invoice.id %>/pdf" class="flex items-center gap-2 bg-white ring-1 ring-[#a8b3bb]/20 px-4 py-2.5 rounded-xl hover:bg-[#e8eff4] transition-all text-sm font-medium">
-            <span class="material-symbols-outlined text-[#0c56d0]">picture_as_pdf</span> Ladda ner PDF
-          </a>
-        <% } %>
-        <% var sc = invoice.status === 'new' ? 'bg-[#0c56d0] text-white' : invoice.status === 'approved' ? 'bg-emerald-600 text-white' : invoice.status === 'exported' ? 'bg-amber-500 text-white' : 'border-2 border-emerald-600 text-emerald-600'; %>
-        <% var sl = invoice.status === 'new' ? 'Ny' : invoice.status === 'approved' ? 'Godkänd' : invoice.status === 'exported' ? 'Exporterad' : 'Betald'; %>
-        <span class="inline-flex items-center px-4 py-2 rounded-full text-sm font-bold <%= sc %>"><%= sl %></span>
-      </div>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- Main: Edit form -->
-      <div class="lg:col-span-2 bg-white rounded-xl shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 p-8">
-        <h2 class="text-lg font-bold font-manrope mb-6 flex items-center gap-2">
-          <span class="material-symbols-outlined text-[#0c56d0]">edit_note</span> Fakturadata
-        </h2>
-        <form method="POST" action="/invoices/<%= invoice.id %>" class="space-y-5">
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Leverantör</label>
-              <input type="text" name="vendor_name" value="<%= invoice.vendor_name || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Fakturanr.</label>
-              <input type="text" name="invoice_number" value="<%= invoice.invoice_number || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none font-mono"/>
-            </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="label" for="invoice_number">Fakturanummer</label>
+            <input class="input font-mono" type="text" id="invoice_number" name="invoice_number" value="<%= invoice.invoice_number || '' %>"/>
           </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Belopp</label>
-              <input type="number" step="0.01" name="amount" value="<%= invoice.amount || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Valuta</label>
-              <select name="currency" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none">
-                <option value="SEK" <%= invoice.currency === 'SEK' ? 'selected' : '' %>>SEK</option>
-                <option value="EUR" <%= invoice.currency === 'EUR' ? 'selected' : '' %>>EUR</option>
-                <option value="USD" <%= invoice.currency === 'USD' ? 'selected' : '' %>>USD</option>
-                <option value="DKK" <%= invoice.currency === 'DKK' ? 'selected' : '' %>>DKK</option>
-                <option value="PLN" <%= invoice.currency === 'PLN' ? 'selected' : '' %>>PLN</option>
-              </select>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Förfallodatum</label>
-              <input type="date" name="due_date" value="<%= invoice.due_date || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none"/>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Status</label>
-              <select name="status" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none">
-                <option value="new" <%= invoice.status === 'new' ? 'selected' : '' %>>Ny</option>
-                <option value="approved" <%= invoice.status === 'approved' ? 'selected' : '' %>>Godkänd</option>
-                <option value="exported" <%= invoice.status === 'exported' ? 'selected' : '' %>>Exporterad</option>
-                <option value="paid" <%= invoice.status === 'paid' ? 'selected' : '' %>>Betald</option>
-              </select>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">OCR</label>
-              <input type="text" name="ocr" value="<%= invoice.ocr || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none font-mono"/>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Bankgiro</label>
-              <input type="text" name="bankgiro" value="<%= invoice.bankgiro || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none font-mono"/>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">Plusgiro</label>
-              <input type="text" name="plusgiro" value="<%= invoice.plusgiro || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none font-mono"/>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-1.5">IBAN</label>
-              <input type="text" name="iban" value="<%= invoice.iban || '' %>" class="w-full bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none font-mono"/>
-            </div>
-          </div>
-          <div class="pt-2">
-            <button type="submit" class="bg-gradient-to-br from-[#0c56d0] to-[#004aba] text-white font-manrope font-bold py-3 px-8 rounded-xl shadow-lg shadow-[#0c56d0]/20 hover:opacity-95 active:scale-[0.98] transition-all flex items-center gap-2">
-              <span class="material-symbols-outlined text-sm">save</span> Spara ändringar
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <!-- Sidebar: Email info -->
-      <div class="space-y-6">
-        <div class="bg-white rounded-xl shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 p-6">
-          <h3 class="text-sm font-bold font-manrope uppercase tracking-wider text-[#566168] mb-4 flex items-center gap-2">
-            <span class="material-symbols-outlined text-[#0c56d0] text-sm">mail</span> E-postinfo
-          </h3>
-          <div class="space-y-4 text-sm">
-            <div>
-              <span class="text-xs text-[#566168] uppercase tracking-wider font-semibold">Fran</span>
-              <p class="mt-0.5 text-[#29343a] break-all"><%= invoice.sender || '-' %></p>
-            </div>
-            <div>
-              <span class="text-xs text-[#566168] uppercase tracking-wider font-semibold">Amne</span>
-              <p class="mt-0.5 text-[#29343a]"><%= invoice.subject || '-' %></p>
-            </div>
-            <div>
-              <span class="text-xs text-[#566168] uppercase tracking-wider font-semibold">Mottagen</span>
-              <p class="mt-0.5 text-[#29343a]"><%= invoice.received_at ? invoice.received_at.substring(0,10) : '-' %></p>
-            </div>
-            <div>
-              <span class="text-xs text-[#566168] uppercase tracking-wider font-semibold">Processad</span>
-              <p class="mt-0.5 text-[#29343a]"><%= invoice.processed_at ? invoice.processed_at.substring(0,10) : '-' %></p>
-            </div>
+          <div>
+            <label class="label" for="due_date">Förfallodatum</label>
+            <input class="input" type="date" id="due_date" name="due_date" value="<%= invoice.due_date || '' %>"/>
           </div>
         </div>
-
-        <div class="bg-white rounded-xl shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 p-6">
-          <h3 class="text-sm font-bold font-manrope uppercase tracking-wider text-[#566168] mb-4 flex items-center gap-2">
-            <span class="material-symbols-outlined text-[#0c56d0] text-sm">info</span> Snabbinfo
-          </h3>
-          <div class="space-y-3 text-sm">
-            <div class="flex justify-between">
-              <span class="text-[#566168]">Belopp</span>
-              <span class="font-bold"><%= invoice.amount ? Number(invoice.amount).toFixed(2) + ' ' + (invoice.currency || '') : '-' %></span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-[#566168]">Förfaller</span>
-              <span class="font-medium"><%= invoice.due_date || '-' %></span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-[#566168]">OCR</span>
-              <span class="font-mono"><%= invoice.ocr || '-' %></span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-[#566168]">BG</span>
-              <span class="font-mono"><%= invoice.bankgiro || '-' %></span>
-            </div>
+        <div class="grid grid-cols-3 gap-4">
+          <div class="col-span-2">
+            <label class="label" for="amount">Belopp</label>
+            <input class="input tabular-nums" type="text" inputmode="decimal" id="amount" name="amount" value="<%= invoice.amount != null ? String(invoice.amount.toFixed(2)).replace('.', ',') : '' %>" placeholder="0,00"/>
+          </div>
+          <div>
+            <label class="label" for="currency">Valuta</label>
+            <select class="input" id="currency" name="currency">
+              <% currencies.forEach(function (c) { %><option value="<%= c %>" <%= invoice.currency === c ? 'selected' : '' %>><%= c %></option><% }); %>
+            </select>
           </div>
         </div>
-      </div>
-    </div>
-  </main>
-</body>
-</html>
+        <div>
+          <label class="label" for="status">Status</label>
+          <select class="input" id="status" name="status">
+            <% ['new', 'approved', 'exported', 'paid'].forEach(function (s) { %><option value="<%= s %>" <%= invoice.status === s ? 'selected' : '' %>><%= h.statusLabel(s) %></option><% }); %>
+          </select>
+        </div>
+
+        <details class="rounded-lg border border-line" <%= invoice.ocr || invoice.bankgiro || invoice.plusgiro || invoice.iban ? 'open' : '' %>>
+          <summary class="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-ink-muted hover:text-ink">Betalningsuppgifter</summary>
+          <div class="space-y-4 border-t border-line p-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="label" for="ocr">OCR / referens</label>
+                <input class="input font-mono" type="text" id="ocr" name="ocr" value="<%= invoice.ocr || '' %>"/>
+              </div>
+              <div>
+                <label class="label" for="bankgiro">Bankgiro</label>
+                <input class="input font-mono" type="text" id="bankgiro" name="bankgiro" value="<%= invoice.bankgiro || '' %>"/>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="label" for="plusgiro">Plusgiro</label>
+                <input class="input font-mono" type="text" id="plusgiro" name="plusgiro" value="<%= invoice.plusgiro || '' %>"/>
+              </div>
+              <div>
+                <label class="label" for="iban">IBAN</label>
+                <input class="input font-mono" type="text" id="iban" name="iban" value="<%= invoice.iban || '' %>"/>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <div class="flex items-center justify-between gap-3 pt-1">
+          <p class="hint mt-0">Töm ett fält för att ta bort värdet.<% if (invoice.manually_edited) { %> Ändrad för hand – skrivs inte över vid omläsning.<% } %></p>
+          <button type="submit" class="btn btn-primary"><span class="icon">save</span>Spara</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card p-6">
+      <h2 class="section-title mb-4"><span class="icon text-primary">mail</span>Från mailet</h2>
+      <dl class="space-y-3 text-sm">
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Avsändare</dt>
+          <dd class="mt-0.5 break-words"><%= invoice.sender || '–' %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Ämne</dt>
+          <dd class="mt-0.5 break-words"><%= invoice.subject || '–' %></dd>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Mottaget</dt>
+            <dd class="mt-0.5"><%= h.date(invoice.received_at) %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Hämtat till AFORT</dt>
+            <dd class="mt-0.5"><%= h.date(invoice.processed_at) %></dd>
+          </div>
+        </div>
+      </dl>
+    </section>
+  </div>
+</div>
+<%- include('partials/shell-bottom') %>

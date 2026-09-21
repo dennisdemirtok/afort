@@ -1,0 +1,138 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-ink font-sans antialiased;
+  }
+  h1, h2, h3 {
+    @apply font-display;
+  }
+  /* Visible keyboard focus everywhere */
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary/40 ring-offset-1;
+  }
+}
+
+@layer components {
+  .icon {
+    font-family: "Material Symbols Outlined";
+    font-weight: normal;
+    font-style: normal;
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    direction: ltr;
+    flex-shrink: 0;
+    -webkit-font-smoothing: antialiased;
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+    vertical-align: middle;
+  }
+  .icon-sm { font-size: 16px; }
+  .icon-lg { font-size: 24px; }
+  .icon-xl { font-size: 40px; }
+
+  .card {
+    @apply bg-white rounded-xl border border-line shadow-card;
+  }
+
+  .page-title {
+    @apply text-3xl font-extrabold tracking-tight;
+  }
+  .page-subtitle {
+    @apply text-sm text-ink-muted mt-1;
+  }
+  .section-title {
+    @apply text-base font-bold font-display flex items-center gap-2;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold
+           transition duration-150 whitespace-nowrap select-none
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+  .btn-primary {
+    @apply bg-primary text-white shadow-sm shadow-primary/30 hover:bg-primary-dim active:scale-[0.98];
+  }
+  .btn-secondary {
+    @apply bg-white text-ink border border-line hover:bg-surface-low hover:border-slate-300 active:scale-[0.98];
+  }
+  .btn-success {
+    @apply bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 hover:bg-emerald-700 active:scale-[0.98];
+  }
+  .btn-danger {
+    @apply bg-white text-red-600 border border-red-200 hover:bg-red-50 active:scale-[0.98];
+  }
+  .btn-ghost {
+    @apply text-ink-muted hover:bg-surface-mid hover:text-ink;
+  }
+
+  /* Forms */
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wider text-ink-muted mb-1.5;
+  }
+  .input {
+    @apply w-full bg-white border border-line rounded-lg px-3.5 py-2.5 text-sm text-ink
+           placeholder:text-ink-faint
+           focus:border-primary focus:ring-2 focus:ring-primary/15 focus:outline-none;
+  }
+  .hint {
+    @apply text-xs text-ink-muted mt-1.5;
+  }
+
+  /* Tables */
+  .th {
+    @apply px-4 py-3 text-[11px] font-bold font-display uppercase tracking-wider text-ink-muted text-left whitespace-nowrap;
+  }
+  .td {
+    @apply px-4 py-3.5 text-sm align-middle;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap;
+  }
+  .badge-new { @apply bg-primary-soft text-primary; }
+  .badge-approved { @apply bg-amber-100 text-amber-800; }
+  .badge-exported { @apply bg-violet-100 text-violet-800; }
+  .badge-paid { @apply bg-emerald-100 text-emerald-800; }
+  .badge-overdue { @apply bg-red-100 text-red-700; }
+  .badge-neutral { @apply bg-surface-mid text-ink-muted; }
+
+  /* Sidebar */
+  .nav-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium font-display text-ink-muted
+           transition-colors hover:bg-surface-mid hover:text-ink;
+  }
+  .nav-link-active {
+    @apply bg-primary-soft text-primary hover:bg-primary-soft hover:text-primary font-bold;
+  }
+
+  /* Flash messages */
+  .flash {
+    @apply flex items-start gap-2 rounded-lg border px-4 py-3 text-sm mb-6;
+  }
+  .flash-ok { @apply bg-emerald-50 border-emerald-200 text-emerald-800; }
+  .flash-err { @apply bg-red-50 border-red-200 text-red-800; }
+  .flash-info { @apply bg-primary-soft border-primary/20 text-primary-dim; }
+
+  /* Segmented tabs */
+  .tab {
+    @apply rounded-md px-3.5 py-2 text-sm font-medium text-ink-muted transition-colors hover:text-ink whitespace-nowrap;
+  }
+  .tab-active {
+    @apply bg-white text-primary shadow-sm font-semibold hover:text-primary;
+  }
+
+  .avatar {
+    @apply flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary-soft text-[11px] font-bold text-primary;
+  }
+}

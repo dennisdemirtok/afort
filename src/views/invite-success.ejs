@@ -1,55 +1,45 @@
-<!DOCTYPE html>
-<html class="light" lang="sv">
-<head>
-  <meta charset="utf-8"/>
-  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-  <title>AFORT - Användare inbjuden</title>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-  <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-  <style>
-    body { font-family: 'Inter', sans-serif; background-color: #f7f9fc; color: #29343a; }
-    .font-manrope { font-family: 'Manrope', sans-serif; }
-    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; display: inline-block; }
-  </style>
-</head>
-<body class="min-h-screen flex items-center justify-center px-4">
-  <div class="w-full max-w-lg">
-    <div class="bg-white rounded-xl shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 p-10 text-center">
-      <div class="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-6">
-        <span class="material-symbols-outlined text-emerald-600 text-3xl">check_circle</span>
-      </div>
-      <h1 class="text-2xl font-extrabold font-manrope mb-2"><%= user.name %> inbjuden!</h1>
-      <p class="text-[#566168] text-sm mb-8">Konto skapat för <%= user.name %> (<%= user.email %>). Dela inloggningsuppgifterna nedan. Lösenordet visas bara denna enda gång.</p>
+<%- include('partials/head', { title: mode === 'reset' ? 'Nytt lösenord' : 'Användare inbjuden' }) %>
+<%- include('partials/shell-top') %>
 
-      <div class="bg-[#f0f4f8] rounded-xl p-4 mb-4">
-        <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-2">E-post</label>
-        <div class="flex gap-2">
-          <input type="text" value="<%= user.email %>" readonly class="flex-grow bg-white border border-[#a8b3bb]/20 rounded-lg px-3 py-2 text-sm font-mono text-[#29343a] select-all"/>
-        </div>
-      </div>
+<div class="mx-auto max-w-lg">
+  <div class="card p-8 text-center">
+    <span class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100"><span class="icon icon-lg text-emerald-700">check</span></span>
+    <h1 class="text-2xl font-extrabold tracking-tight"><%= mode === 'reset' ? 'Nytt lösenord skapat' : user.name + ' är inbjuden' %></h1>
+    <p class="mt-2 text-sm text-ink-muted">Skicka uppgifterna nedan till <%= user.name %>. Lösenordet visas bara den här gången.</p>
 
-      <div class="bg-[#f0f4f8] rounded-xl p-4 mb-6">
-        <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-2">Tillfallslösenord</label>
-        <div class="flex gap-2">
-          <input type="text" id="temp-password" value="<%= tempPassword %>" readonly class="flex-grow bg-white border border-[#a8b3bb]/20 rounded-lg px-3 py-2 text-sm font-mono text-[#29343a] select-all"/>
-          <button onclick="navigator.clipboard.writeText(document.getElementById('temp-password').value); this.textContent='Kopierad!'; setTimeout(() => this.innerHTML='<span class=\'material-symbols-outlined text-sm\'>content_copy</span> Kopiera', 2000)" class="bg-[#0c56d0] text-white px-4 py-2 rounded-lg text-sm font-bold hover:opacity-90 transition-all flex items-center gap-1 whitespace-nowrap">
-            <span class="material-symbols-outlined text-sm">content_copy</span> Kopiera
-          </button>
-        </div>
+    <div class="mt-6 space-y-3 rounded-lg bg-surface-low p-4 text-left">
+      <div>
+        <span class="label mb-0.5">Adress</span>
+        <p class="break-all font-mono text-sm" id="login-url"><%= loginUrl %></p>
       </div>
-
-      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-6">
-        <p class="text-xs text-amber-700">
-          <span class="material-symbols-outlined text-xs align-middle">warning</span>
-          Lösenordet visas bara denna enda gång. Spara det eller dela det nu.
-        </p>
+      <div>
+        <span class="label mb-0.5">E-post</span>
+        <p class="break-all font-mono text-sm" id="login-email"><%= user.email %></p>
       </div>
-
-      <a href="/settings" class="inline-flex items-center gap-2 text-[#0c56d0] font-medium text-sm hover:underline">
-        <span class="material-symbols-outlined text-sm">arrow_back</span> Tillbaka till inställningar
-      </a>
+      <div>
+        <span class="label mb-0.5">Tillfälligt lösenord</span>
+        <p class="font-mono text-sm" id="temp-password"><%= tempPassword %></p>
+      </div>
     </div>
+
+    <button type="button" id="copy-button" class="btn btn-primary mt-5 w-full"><span class="icon">content_copy</span><span data-label>Kopiera allt</span></button>
+    <p class="mt-4 text-xs text-ink-muted">Användaren byter själv lösenord under sitt konto (namnet längst ner i menyn) efter första inloggningen.</p>
+    <a href="/settings" class="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"><span class="icon icon-sm">arrow_back</span>Tillbaka till inställningar</a>
   </div>
-</body>
-</html>
+</div>
+
+<script>
+  document.getElementById('copy-button').addEventListener('click', function () {
+    var button = this, label = button.querySelector('[data-label]');
+    var get = function (id) { return document.getElementById(id).textContent; };
+    var text = 'AFORT – inloggning
+Adress: ' + get('login-url') + '
+E-post: ' + get('login-email') + '
+Lösenord: ' + get('temp-password');
+    navigator.clipboard.writeText(text).then(function () {
+      label.textContent = 'Kopierat!';
+      setTimeout(function () { label.textContent = 'Kopiera allt'; }, 2000);
+    });
+  });
+</script>
+<%- include('partials/shell-bottom') %>

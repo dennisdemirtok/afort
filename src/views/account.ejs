@@ -1,0 +1,30 @@
+<%- include('partials/head', { title: 'Mitt konto' }) %>
+<%- include('partials/shell-top') %>
+
+<div class="mb-8">
+  <h1 class="page-title">Mitt konto</h1>
+  <p class="page-subtitle"><%= user.name %> · <%= user.email %> · <%= h.roleLabel(user.role) %></p>
+</div>
+
+<section class="card max-w-xl p-6">
+  <h2 class="section-title mb-5"><span class="icon text-primary">lock</span>Byt lösenord</h2>
+  <form method="POST" action="/account/password" class="space-y-4">
+    <div>
+      <label class="label" for="current">Nuvarande lösenord</label>
+      <input class="input" type="password" id="current" name="current" required autocomplete="current-password"/>
+    </div>
+    <div>
+      <label class="label" for="password">Nytt lösenord</label>
+      <input class="input" type="password" id="password" name="password" required minlength="8" autocomplete="new-password"/>
+      <p class="hint">Minst 8 tecken.</p>
+    </div>
+    <div>
+      <label class="label" for="confirm">Upprepa nytt lösenord</label>
+      <input class="input" type="password" id="confirm" name="confirm" required minlength="8" autocomplete="new-password"/>
+    </div>
+    <div class="flex justify-end pt-1">
+      <button type="submit" class="btn btn-primary"><span class="icon">save</span>Byt lösenord</button>
+    </div>
+  </form>
+</section>
+<%- include('partials/shell-bottom') %>

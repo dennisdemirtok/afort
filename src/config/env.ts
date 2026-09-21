@@ -6,6 +6,11 @@ dotenv.config();
 export const env = {
   port: parseInt(process.env.PORT || "3000", 10),
   nodeEnv: process.env.NODE_ENV || "development",
+  // Railway sets RAILWAY_PUBLIC_DOMAIN; treat that as production too (HTTPS, secure cookies)
+  isProduction: process.env.NODE_ENV === "production" || !!process.env.RAILWAY_PUBLIC_DOMAIN,
+  publicUrl: process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+    : `http://localhost:${process.env.PORT || "3000"}`,
 
   // Gmail
   gmailClientId: process.env.GMAIL_CLIENT_ID || "",

@@ -1,46 +1,56 @@
 # AFORT – Faktura-automat
 
-Automated invoice processing: Gmail → PDF parsing → Nordea pain.001 payment files.
+Hämtar leverantörsfakturor från Gmail, tolkar PDF:erna, håller koll på vad som är betalt och skapar
+betalfiler (ISO 20022 pain.001) för Nordea.
 
-## Features
+## Så fungerar det
 
-- **Gmail polling** – Automatically fetches invoice emails matching configurable rules
-- **PDF parsing** – Extracts amount, due date, OCR, bankgiro from invoice PDFs
-- **Payment files** – Generates Nordea-compatible ISO 20022 pain.001 XML
-- **Web UI** – Invoice management dashboard for the bookkeeper
-- **CSV export** – Fortnox-compatible export
+- **Gmail** kontrolleras var 15:e minut (och vid start). Mail från avsändarna under *Inställningar →
+  Avsändare som hämtas in* med en bifogad PDF blir fakturor. Hämtningen bygger inte på att mailet är
+  oläst – de senaste 30 dagarna gås igenom och redan kända mail hoppas över.
+- **Fakturanummer** tas i första hand från ämnesraden (`src/services/invoice-extract.ts`), övrigt från
+  PDF:en (`src/services/pdf-parser.ts`).
+- **Påminnelser och vidarebefordrade kopior** av en faktura som redan finns blir inte nya fakturor;
+  en påminnelse om en obetald faktura ger i stället en notis.
+- **Raderade fakturor** kommer aldrig tillbaka, inte heller vid *Läs om alla fakturor*.
+- **Läs om alla fakturor** (Inställningar → Underhåll) tolkar om alla mail i bakgrunden men rör inte
+  status, betalmarkeringar eller fakturor som ändrats för hand.
+- **Bankutdrag**: ladda upp Nordeas CSV, granska träffarna och bocka av betalda fakturor.
 
-## Setup
+## Roller
+
+| Roll | Kan |
+|------|-----|
+| Administratör | Allt, inklusive radera fakturor, användare, avsändare och underhåll |
+| Bokförare | Se fakturor, ladda ner PDF/ZIP/CSV, ändra status, läsa in bankutdrag, skapa betalfiler |
+
+Det inbyggda kontot `admin@afort.local` har `AUTH_TOKEN` som startlösenord. `AUTH_TOKEN` fungerar
+alltid som reservnyckel för det kontot (om lösenordet tappas bort) och som `Authorization: Bearer`
+för API:et.
+
+## Utveckling
 
 ```bash
-cp .env.example .env
-# Fill in your Gmail OAuth2 credentials and company details
+cp .env.example .env      # fyll i värden
 npm install
-npm run build
-npm start
+npm run dev               # bygger CSS och startar med hot reload på http://localhost:3000
+npm run typecheck
 ```
 
-### Gmail OAuth2
+Stilar: Tailwind byggs till en statisk fil (`npm run build:css`) från `src/styles/app.css` och
+klasserna i `src/views`. Återkommande komponenter (`.btn`, `.card`, `.input`, `.badge` …) finns i
+`src/styles/app.css`. Ikoner: `<span class="icon">namn</span>` (Material Symbols) – ikonfonten
+begränsas automatiskt till de ikoner som används i vyerna.
 
-1. Create OAuth2 credentials in Google Cloud Console
-2. Visit `/auth/google` to complete the auth flow
-3. Save the refresh token as `GMAIL_REFRESH_TOKEN`
+## Drift (Railway)
 
-## Development
+- Bygg: `npm install && npm run build`, start: `node dist/index.js` (en enda tjänst – Gmail-hämtningen
+  körs i samma process).
+- Persistent volym monterad på `/data`; sätt `DATABASE_PATH=/data/invoice.db`. Databas, PDF:er och
+  betalfiler ligger där.
+- Miljövariabler: se `.env.example`. `DEBTOR_IBAN` och `ORG_NUMBER` krävs för giltiga betalfiler.
+- Gmail kopplas under *Inställningar → Gmail-koppling*; spara den refresh token som visas som
+  `GMAIL_REFRESH_TOKEN`.
 
-```bash
-npm run dev          # Web server with hot reload
-npm run dev:worker   # Gmail polling worker
-```
-
-## Deployment (Railway)
-
-1. Push to GitHub
-2. Connect repo in Railway
-3. Add environment variables from `.env.example`
-4. Attach persistent volume at `/data`
-5. Optionally add a second service for the worker using `node dist/worker.js`
-
-## Environment Variables
-
-See `.env.example` for all required variables.
+Avsändarreglerna ligger i databasen. `src/config/gmail-rules.json` används bara för att fylla en tom
+databas första gången.

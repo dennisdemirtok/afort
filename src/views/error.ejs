@@ -1,8 +1,21 @@
-<% const body = `
-<div class="error-page">
-  <h1>Fel</h1>
-  <p>${message}</p>
-  <a href="/invoices" class="btn btn-primary">Till fakturor</a>
-</div>
-`; %>
-<%- include('layouts/main', { body }) %>
+<%- include('partials/head', { title: locals.title || 'Fel' }) %>
+<% if (locals.user) { %>
+  <%- include('partials/shell-top') %>
+  <div class="mx-auto max-w-lg py-16 text-center">
+    <span class="icon icon-xl mb-4 block text-ink-faint/60">sentiment_dissatisfied</span>
+    <h1 class="text-2xl font-extrabold tracking-tight"><%= locals.title || 'Något gick fel' %></h1>
+    <p class="mt-2 text-sm text-ink-muted"><%= message %></p>
+    <a href="/invoices" class="btn btn-primary mt-6"><span class="icon">receipt_long</span>Till fakturorna</a>
+  </div>
+  <%- include('partials/shell-bottom') %>
+<% } else { %>
+<body class="flex min-h-screen items-center justify-center px-4 py-12">
+  <main class="card w-full max-w-md p-8 text-center">
+    <span class="icon icon-xl mb-4 block text-ink-faint/60">sentiment_dissatisfied</span>
+    <h1 class="text-2xl font-extrabold tracking-tight"><%= locals.title || 'Något gick fel' %></h1>
+    <p class="mt-2 text-sm text-ink-muted"><%= message %></p>
+    <a href="/login" class="btn btn-primary mt-6">Till inloggningen</a>
+  </main>
+</body>
+</html>
+<% } %>

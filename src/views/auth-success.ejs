@@ -1,19 +1,15 @@
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-  <meta charset="UTF-8">
-  <title>AFORT – OAuth klar</title>
-  <link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-  <div class="login-container">
-    <div class="login-box">
-      <h1>OAuth2 klar</h1>
-      <p>Spara denna refresh token som <code>GMAIL_REFRESH_TOKEN</code> miljövariabel:</p>
-      <textarea readonly style="width:100%;height:100px;font-family:monospace"><%= refreshToken %></textarea>
-      <br><br>
-      <a href="/invoices" class="btn btn-primary">Till fakturor</a>
-    </div>
-  </div>
+<%- include('partials/head', { title: 'Gmail anslutet' }) %>
+<body class="flex min-h-screen items-center justify-center px-4 py-12">
+  <main class="card w-full max-w-xl p-8">
+    <span class="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100"><span class="icon icon-lg text-emerald-700">check</span></span>
+    <h1 class="text-2xl font-extrabold tracking-tight">Gmail är anslutet</h1>
+    <% if (refreshToken) { %>
+      <p class="mt-2 text-sm text-ink-muted">Kopplingen gäller tills servern startas om. För att göra den permanent: spara värdet nedan som miljövariabeln <code class="rounded bg-surface-mid px-1 font-mono text-xs">GMAIL_REFRESH_TOKEN</code> i Railway och starta om tjänsten.</p>
+      <textarea readonly rows="4" onclick="this.select()" class="input mt-5 font-mono text-xs" aria-label="Refresh token"><%= refreshToken %></textarea>
+    <% } else { %>
+      <p class="mt-2 text-sm text-ink-muted">Google skickade ingen ny nyckel den här gången, vilket betyder att den befintliga kopplingen fortfarande gäller.</p>
+    <% } %>
+    <a href="/settings" class="btn btn-primary mt-6">Till inställningar</a>
+  </main>
 </body>
 </html>

@@ -1,70 +1,116 @@
-<!DOCTYPE html>
-<html class="light" lang="sv">
-<head>
-  <title>AFORT - Skapa betalfil</title>
-  <%- include('partials/head') %>
-</head>
-<body class="flex min-h-screen">
-  <%- include('partials/navbar') %>
-  <main class="flex-grow pt-24 pb-12 px-8 ml-64 max-w-5xl mx-auto">
-    <div class="mb-8 flex items-center gap-2 text-sm text-[#566168]">
-      <a href="/payment-files" class="hover:text-[#0c56d0] transition-colors flex items-center gap-1">
-        <span class="material-symbols-outlined text-sm">arrow_back</span> Betalfiler
-      </a>
-      <span>/</span>
-      <span class="text-[#29343a] font-medium">Skapa ny</span>
-    </div>
+<%- include('partials/head', { title: 'Skapa betalfil' }) %>
+<%- include('partials/shell-top') %>
+<% var payable = invoices.filter(function (i) { return !i.blocker; }); %>
 
-    <h1 class="text-3xl font-extrabold font-manrope tracking-tight mb-8">Skapa betalfil</h1>
+<nav class="mb-6 flex items-center gap-2 text-sm text-ink-muted" aria-label="Brödsmulor">
+  <a href="/payment-files" class="flex items-center gap-1 hover:text-primary"><span class="icon icon-sm">arrow_back</span>Betalfiler</a>
+  <span>/</span>
+  <span class="font-medium text-ink">Skapa ny</span>
+</nav>
 
-    <% if (invoices.length === 0) { %>
-      <div class="bg-white rounded-xl p-8 shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 text-center">
-        <span class="material-symbols-outlined text-4xl text-[#a8b3bb] mb-4">info</span>
-        <p class="text-[#566168]">Inga godkända fakturor. Godkänn fakturor först.</p>
-      </div>
-    <% } else { %>
-      <form method="POST" action="/payment-files/create">
-        <div class="bg-white rounded-xl p-6 shadow-[0_8px_48px_rgba(41,52,58,0.06)] border border-[#a8b3bb]/10 mb-6">
-          <label class="block text-xs font-semibold uppercase tracking-wider text-[#566168] mb-2">Exekveringsdatum</label>
-          <input type="date" name="execution_date" value="<%= new Date().toISOString().split('T')[0] %>" required class="bg-white border border-[#a8b3bb]/20 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0c56d0]/20 focus:border-[#0c56d0] outline-none w-48"/>
-        </div>
+<div class="mb-8">
+  <h1 class="page-title">Skapa betalfil</h1>
+  <p class="page-subtitle">Välj bland godkända fakturor. En fil kan bara innehålla en valuta.</p>
+</div>
 
-        <div class="bg-white rounded-xl overflow-hidden shadow-[0_32px_48px_-12px_rgba(41,52,58,0.06)]">
-          <table class="w-full text-left border-collapse">
-            <thead>
-              <tr class="bg-[#f0f4f8]">
-                <th class="px-6 py-4"><input type="checkbox" id="select-all" class="rounded"/></th>
-                <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Leverantör</th>
-                <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Fakturanr.</th>
-                <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-right">Belopp</th>
-                <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Förfaller</th>
+<% if (!configured) { %>
+  <div class="flash flash-err"><span class="icon">error</span><span>Företagets IBAN (<code>DEBTOR_IBAN</code>) är inte inställt på servern. Betalfilen blir inte giltig förrän det är gjort.</span></div>
+<% } %>
+
+<% if (invoices.length === 0) { %>
+  <div class="card px-6 py-16 text-center">
+    <span class="icon icon-xl mb-3 block text-ink-faint/60">task_alt</span>
+    <p class="font-display font-bold">Inga godkända fakturor</p>
+    <p class="mx-auto mt-1 max-w-md text-sm text-ink-muted">Bara fakturor med status Godkänd kan läggas i en betalfil. Godkänn dem i fakturalistan först.</p>
+    <a href="/invoices?status=new" class="btn btn-secondary mt-5">Visa nya fakturor</a>
+  </div>
+<% } else { %>
+  <form method="POST" action="/payment-files/create">
+    <div class="card overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse">
+          <thead class="border-b border-line bg-surface-low">
+            <tr>
+              <th class="th w-10"><input type="checkbox" id="select-all" class="rounded border-slate-300 text-primary focus:ring-primary/30" aria-label="Markera alla" <%= payable.length ? '' : 'disabled' %>/></th>
+              <th class="th">Leverantör</th>
+              <th class="th">Fakturanr.</th>
+              <th class="th text-right">Belopp</th>
+              <th class="th">Förfaller</th>
+              <th class="th">Betalas till</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-line">
+            <% invoices.forEach(function (inv) { %>
+              <tr class="<%= inv.blocker ? 'bg-surface-low/60' : 'hover:bg-surface-low' %>">
+                <td class="td"><input type="checkbox" name="invoice_ids" value="<%= inv.id %>" data-currency="<%= inv.currency %>" data-amount="<%= inv.amount || 0 %>" class="pay-check rounded border-slate-300 text-primary focus:ring-primary/30" <%= inv.blocker ? 'disabled' : '' %> aria-label="Välj <%= inv.invoice_number || 'faktura' %>"/></td>
+                <td class="td font-semibold"><a href="/invoices/<%= inv.id %>" class="hover:text-primary"><%= inv.vendor_name || 'Okänd' %></a></td>
+                <td class="td font-mono text-[13px] text-ink-muted"><%= inv.invoice_number || '–' %></td>
+                <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= h.money(inv.amount, inv.currency) %></td>
+                <td class="td whitespace-nowrap <%= h.isOverdue(inv) ? 'font-medium text-red-700' : 'text-ink-muted' %>"><%= inv.due_date || '–' %></td>
+                <td class="td text-sm">
+                  <% if (inv.blocker) { %>
+                    <a href="/invoices/<%= inv.id %>" class="badge badge-overdue hover:bg-red-200"><span class="icon icon-sm">error</span><%= inv.blocker %></a>
+                  <% } else { %>
+                    <span class="font-mono text-[13px] text-ink-muted"><%= inv.iban || (inv.bankgiro ? 'BG ' + inv.bankgiro : 'PG ' + inv.plusgiro) %></span>
+                  <% } %>
+                </td>
               </tr>
-            </thead>
-            <tbody class="divide-y divide-[#f0f4f8]">
-              <% invoices.forEach(function(inv) { %>
-                <tr class="hover:bg-[#f7f9fc] transition-colors">
-                  <td class="px-6 py-4"><input type="checkbox" name="invoice_ids" value="<%= inv.id %>" class="rounded"/></td>
-                  <td class="px-6 py-4 text-sm font-semibold"><%= inv.vendor_name || '-' %></td>
-                  <td class="px-6 py-4 text-sm font-mono text-[#566168]"><%= inv.invoice_number || '-' %></td>
-                  <td class="px-6 py-4 text-sm font-bold text-right"><%= inv.amount ? Number(inv.amount).toFixed(2) + ' ' + (inv.currency || '') : '-' %></td>
-                  <td class="px-6 py-4 text-sm text-[#566168]"><%= inv.due_date || '-' %></td>
-                </tr>
-              <% }); %>
-            </tbody>
-          </table>
-          <div class="px-6 py-4 bg-[#f0f4f8] border-t border-[#e8eff4]">
-            <button type="submit" class="bg-gradient-to-br from-[#0c56d0] to-[#004aba] text-white font-manrope font-bold py-3 px-8 rounded-xl shadow-lg shadow-[#0c56d0]/20 hover:opacity-95 active:scale-[0.98] transition-all flex items-center gap-2 text-sm">
-              <span class="material-symbols-outlined text-sm">payments</span> Skapa pain.001-fil
-            </button>
-          </div>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex flex-wrap items-end justify-between gap-4 border-t border-line bg-surface-low px-4 py-4">
+        <div>
+          <label class="label" for="execution_date">Betaldatum</label>
+          <input type="date" id="execution_date" name="execution_date" value="<%= new Date().toISOString().split('T')[0] %>" min="<%= new Date().toISOString().split('T')[0] %>" required class="input w-44"/>
         </div>
-      </form>
-      <script>
-        document.getElementById('select-all').addEventListener('change', function() {
-          document.querySelectorAll('input[name="invoice_ids"]').forEach(function(cb) { cb.checked = this.checked; }.bind(this));
-        });
-      </script>
-    <% } %>
-  </main>
-</body>
-</html>
+        <div class="flex items-center gap-4">
+          <p id="pay-summary" class="text-sm text-ink-muted" aria-live="polite">Inga fakturor valda</p>
+          <button type="submit" id="pay-submit" class="btn btn-primary" disabled><span class="icon">payments</span>Skapa betalfil</button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <script>
+    (function () {
+      var checks = Array.from(document.querySelectorAll('.pay-check:not(:disabled)'));
+      var summary = document.getElementById('pay-summary');
+      var submit = document.getElementById('pay-submit');
+      var master = document.getElementById('select-all');
+
+      function refresh() {
+        var selected = checks.filter(function (c) { return c.checked; });
+        var totals = {};
+        selected.forEach(function (c) { totals[c.dataset.currency] = (totals[c.dataset.currency] || 0) + parseFloat(c.dataset.amount); });
+        var currencies = Object.keys(totals);
+        master.checked = selected.length > 0 && selected.length === checks.length;
+        master.indeterminate = selected.length > 0 && selected.length < checks.length;
+
+        if (!selected.length) {
+          summary.textContent = 'Inga fakturor valda';
+          summary.className = 'text-sm text-ink-muted';
+          submit.disabled = true;
+        } else if (currencies.length > 1) {
+          summary.textContent = 'Du har valt flera valutor (' + currencies.join(', ') + '). Skapa en fil per valuta.';
+          summary.className = 'text-sm font-medium text-red-700';
+          submit.disabled = true;
+        } else {
+          var total = totals[currencies[0]].toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          summary.textContent = selected.length + (selected.length === 1 ? ' faktura · ' : ' fakturor · ') + total + ' ' + currencies[0];
+          summary.className = 'text-sm font-semibold text-ink';
+          submit.disabled = false;
+        }
+      }
+
+      checks.forEach(function (c) { c.addEventListener('change', refresh); });
+      master.addEventListener('change', function () {
+        checks.forEach(function (c) { c.checked = master.checked; });
+        refresh();
+      });
+      refresh();
+    })();
+  </script>
+<% } %>
+<%- include('partials/shell-bottom') %>

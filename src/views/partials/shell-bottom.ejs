@@ -1,0 +1,96 @@
+    </main>
+  </div>
+
+  <script>
+    function toggleNav(open) {
+      document.getElementById('sidebar').classList.toggle('-translate-x-full', !open);
+      document.getElementById('nav-overlay').classList.toggle('hidden', !open);
+    }
+
+    // <form data-confirm="Fråga?"> asks before submitting
+    document.addEventListener('submit', function (e) {
+      var question = e.target.dataset && e.target.dataset.confirm;
+      if (question && !confirm(question)) e.preventDefault();
+    });
+
+    function escapeHtml(value) {
+      var div = document.createElement('div');
+      div.textContent = value == null ? '' : String(value);
+      return div.innerHTML;
+    }
+
+    function toggleNotifications(force) {
+      var dropdown = document.getElementById('notif-dropdown');
+      var open = typeof force === 'boolean' ? force : dropdown.classList.contains('hidden');
+      dropdown.classList.toggle('hidden', !open);
+      document.getElementById('notif-button').setAttribute('aria-expanded', String(open));
+    }
+    document.addEventListener('click', function (e) {
+      if (!document.getElementById('notif-wrapper').contains(e.target)) toggleNotifications(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { toggleNotifications(false); toggleNav(false); }
+    });
+
+    var NOTIF_ICONS = {
+      new_invoice: '<span class="icon text-primary">receipt_long</span>',
+      reminder: '<span class="icon text-red-600">notification_important</span>',
+      info: '<span class="icon text-ink-muted">info</span>'
+    };
+
+    function timeAgo(dateStr) {
+      var then = new Date(String(dateStr).replace(' ', 'T') + 'Z').getTime();
+      if (isNaN(then)) return '';
+      var diff = (Date.now() - then) / 1000;
+      if (diff < 60) return 'Just nu';
+      if (diff < 3600) return Math.floor(diff / 60) + ' min sedan';
+      if (diff < 86400) return Math.floor(diff / 3600) + ' tim sedan';
+      var days = Math.floor(diff / 86400);
+      return days === 1 ? 'I går' : days + ' dagar sedan';
+    }
+
+    function renderNotifications(data) {
+      var badge = document.getElementById('notif-badge');
+      var list = document.getElementById('notif-list');
+      badge.textContent = data.unread > 9 ? '9+' : data.unread;
+      badge.classList.toggle('hidden', !data.unread);
+      badge.classList.toggle('flex', !!data.unread);
+
+      if (!data.notifications.length) {
+        list.innerHTML = '<div class="px-4 py-10 text-center text-sm text-ink-muted"><span class="icon icon-xl mb-2 block opacity-30">notifications_off</span>Inga nya notiser</div>';
+        return;
+      }
+      list.innerHTML = data.notifications.map(function (n) {
+        // Only same-site links; everything from the server is escaped (subjects come from e-mail)
+        var href = /^\/(?!\/)/.test(n.link || '') ? n.link : '/invoices';
+        return '<a href="' + escapeHtml(href) + '" data-id="' + escapeHtml(n.id) + '" class="flex items-start gap-3 border-b border-line px-4 py-3 last:border-0 hover:bg-surface-low">' +
+          '<span class="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-surface-low">' + (NOTIF_ICONS[n.type] || NOTIF_ICONS.info) + '</span>' +
+          '<span class="min-w-0 flex-grow">' +
+            '<span class="block truncate text-sm font-semibold">' + escapeHtml(n.title) + '</span>' +
+            (n.message ? '<span class="block truncate text-xs text-ink-muted">' + escapeHtml(n.message) + '</span>' : '') +
+            '<span class="mt-0.5 block text-[11px] text-ink-faint">' + timeAgo(n.created_at) + '</span>' +
+          '</span></a>';
+      }).join('');
+    }
+
+    document.getElementById('notif-list').addEventListener('click', function (e) {
+      var link = e.target.closest('a[data-id]');
+      if (link) navigator.sendBeacon('/api/notifications/' + encodeURIComponent(link.dataset.id) + '/read');
+    });
+
+    function loadNotifications() {
+      fetch('/api/notifications', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) { if (data) renderNotifications(data); })
+        .catch(function () {});
+    }
+
+    function markAllNotificationsRead() {
+      fetch('/api/notifications/read', { method: 'POST', credentials: 'same-origin' }).then(loadNotifications);
+    }
+
+    loadNotifications();
+    setInterval(function () { if (!document.hidden) loadNotifications(); }, 60000);
+  </script>
+</body>
+</html>

@@ -1,184 +1,134 @@
 import { Router, Request, Response } from "express";
 import fs from "fs";
-import path from "path";
-import { listInvoices, getInvoiceById, updateInvoice, getInvoicesByIds } from "../models/invoice";
+import {
+  listInvoices,
+  getInvoiceById,
+  updateInvoice,
+  getInvoicesByIds,
+  deleteInvoices,
+  setStatusBulk,
+  STATUSES,
+  InvoiceStatus,
+} from "../models/invoice";
 import { listPaymentFiles, getPaymentFileById } from "../models/payment-file";
 import { getUnreadNotifications, getUnreadCount, markAllRead, markRead } from "../models/notification";
-import { generatePain001 } from "../services/pain001";
-import { pollGmail } from "../services/gmail";
+import { generatePain001, validateForPayment } from "../services/pain001";
+import { pollGmail, getPollStatus } from "../services/gmail";
+import { requireAdmin } from "../middleware/auth";
+import { filtersFromQuery, invoicesToCsv } from "./shared";
 
 const router = Router();
 
-// List invoices
+// ---- Invoices ----
+
 router.get("/invoices", (req: Request, res: Response) => {
-  const q = req.query;
-  const filters = {
-    status: String(q.status || "") || undefined,
-    vendor: String(q.vendor || "") || undefined,
-    date_from: String(q.date_from || "") || undefined,
-    date_to: String(q.date_to || "") || undefined,
-  };
-  res.json(listInvoices(filters));
+  res.json(listInvoices(filtersFromQuery(req.query)));
 });
 
-// Get single invoice
 router.get("/invoices/:id", (req: Request, res: Response) => {
   const invoice = getInvoiceById(req.params.id);
   if (!invoice) return res.status(404).json({ error: "Invoice not found" });
   res.json(invoice);
 });
 
-// Update invoice
 router.patch("/invoices/:id", (req: Request, res: Response) => {
-  const invoice = updateInvoice(req.params.id, req.body);
+  const allowed = ["vendor_name", "invoice_number", "amount", "currency", "due_date", "ocr", "bankgiro", "plusgiro", "iban", "status"];
+  const patch: Record<string, any> = {};
+  for (const key of allowed) if (key in req.body) patch[key] = req.body[key];
+  if (patch.status && !STATUSES.includes(patch.status)) return res.status(400).json({ error: "Invalid status" });
+
+  const invoice = updateInvoice(req.params.id, patch);
   if (!invoice) return res.status(404).json({ error: "Invoice not found" });
   res.json(invoice);
 });
 
-// Delete invoice
-router.delete("/invoices/:id", (req: Request, res: Response) => {
-  const { getDb } = require("../models/database");
-  const db = getDb();
-  db.prepare("DELETE FROM invoices WHERE id = ?").run(req.params.id);
-  res.json({ success: true });
+router.delete("/invoices/:id", requireAdmin, (req: Request, res: Response) => {
+  res.json({ success: true, deleted: deleteInvoices([req.params.id]) });
 });
 
-// Bulk actions
 router.post("/invoices/bulk", (req: Request, res: Response) => {
   const { ids, action } = req.body;
-  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+  if (!Array.isArray(ids) || ids.length === 0 || !ids.every((id) => typeof id === "string")) {
     return res.status(400).json({ error: "ids required" });
   }
-  const { getDb } = require("../models/database");
-  const db = getDb();
-  const placeholders = ids.map(() => "?").join(",");
 
   if (action === "delete") {
-    db.prepare(`DELETE FROM invoices WHERE id IN (${placeholders})`).run(...ids);
-    res.json({ success: true, deleted: ids.length });
-  } else if (["new", "approved", "exported", "paid"].includes(action)) {
-    db.prepare(`UPDATE invoices SET status = ? WHERE id IN (${placeholders})`).run(action, ...ids);
-    res.json({ success: true, updated: ids.length, status: action });
-  } else {
-    res.status(400).json({ error: "Invalid action" });
+    return requireAdmin(req, res, () => res.json({ success: true, deleted: deleteInvoices(ids) }));
   }
+  if (STATUSES.includes(action)) {
+    return res.json({ success: true, updated: setStatusBulk(ids, action as InvoiceStatus), status: action });
+  }
+  res.status(400).json({ error: "Invalid action" });
 });
 
-// Download PDF
 router.get("/invoices/:id/pdf", (req: Request, res: Response) => {
   const invoice = getInvoiceById(req.params.id);
-  if (!invoice || !invoice.pdf_path) return res.status(404).json({ error: "PDF not found" });
-  if (!fs.existsSync(invoice.pdf_path)) return res.status(404).json({ error: "PDF file missing" });
+  if (!invoice?.pdf_path || !fs.existsSync(invoice.pdf_path)) return res.status(404).json({ error: "PDF not found" });
   res.download(invoice.pdf_path);
 });
 
-// Create payment file
+// ---- Payment files ----
+
 router.post("/payment-files", (req: Request, res: Response) => {
   const { invoice_ids, execution_date } = req.body;
-  if (!invoice_ids || !Array.isArray(invoice_ids) || invoice_ids.length === 0) {
+  if (!Array.isArray(invoice_ids) || invoice_ids.length === 0) {
     return res.status(400).json({ error: "invoice_ids required" });
   }
+  const invoices = getInvoicesByIds(invoice_ids);
+  const problems = validateForPayment(invoices);
+  if (problems.length > 0) return res.status(400).json({ error: problems.join(" ") });
 
   const execDate = execution_date || new Date().toISOString().split("T")[0];
-  const invoices = getInvoicesByIds(invoice_ids);
-
-  if (invoices.length === 0) return res.status(400).json({ error: "No valid invoices found" });
-
   const result = generatePain001(invoices, execDate);
-
-  // Update invoice statuses
   for (const inv of invoices) {
     updateInvoice(inv.id, { status: "exported", payment_file_id: result.paymentFile.id });
   }
-
   res.json(result.paymentFile);
 });
 
-// List payment files
 router.get("/payment-files", (_req: Request, res: Response) => {
   res.json(listPaymentFiles());
 });
 
-// Download payment file
 router.get("/payment-files/:id/download", (req: Request, res: Response) => {
   const pf = getPaymentFileById(req.params.id);
   if (!pf || !fs.existsSync(pf.file_path)) return res.status(404).json({ error: "File not found" });
   res.download(pf.file_path, pf.filename);
 });
 
-// CSV export for Fortnox
+// ---- Export ----
+
 router.get("/export/csv", (req: Request, res: Response) => {
-  const q = req.query;
-  const filters = {
-    status: String(q.status || "") || undefined,
-    vendor: String(q.vendor || "") || undefined,
-    date_from: String(q.date_from || "") || undefined,
-    date_to: String(q.date_to || "") || undefined,
-  };
-  const invoices = listInvoices(filters);
-
-  const headers = [
-    "id", "vendor_name", "invoice_number", "amount", "currency",
-    "due_date", "ocr", "bankgiro", "plusgiro", "iban", "status", "received_at",
-  ];
-  const rows = invoices.map((inv) =>
-    headers.map((h) => {
-      const val = (inv as any)[h];
-      if (val === null || val === undefined) return "";
-      const str = String(val);
-      return str.includes(",") || str.includes('"') ? `"${str.replace(/"/g, '""')}"` : str;
-    }).join(",")
-  );
-
-  const csv = [headers.join(","), ...rows].join("\n");
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", "attachment; filename=invoices_export.csv");
+  const csv = invoicesToCsv(listInvoices(filtersFromQuery(req.query)));
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename=fakturor_${new Date().toISOString().slice(0, 10)}.csv`);
   res.send(csv);
 });
 
-// Re-process all invoices (preserves paid/approved status)
-router.post("/reprocess", async (_req: Request, res: Response) => {
-  try {
-    const { getDb } = require("../models/database");
-    const db = getDb();
+// ---- Gmail ----
 
-    // Save statuses that aren't "new" (paid, approved, exported)
-    const savedStatuses = db.prepare(
-      "SELECT gmail_message_id, status, payment_file_id FROM invoices WHERE status != 'new'"
-    ).all() as { gmail_message_id: string; status: string; payment_file_id: string | null }[];
-
-    db.prepare("DELETE FROM invoices").run();
-    const count = await pollGmail(true);
-
-    // Restore saved statuses
-    let restored = 0;
-    for (const s of savedStatuses) {
-      if (s.gmail_message_id) {
-        const result = db.prepare(
-          "UPDATE invoices SET status = ?, payment_file_id = ? WHERE gmail_message_id = ?"
-        ).run(s.status, s.payment_file_id, s.gmail_message_id);
-        if (result.changes > 0) restored++;
-      }
-    }
-
-    res.json({ success: true, processed: count, restored });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Trigger Gmail poll manually
+// Looks for new invoice mail right now (the same thing the 15 minute schedule does)
 router.post("/trigger-poll", async (_req: Request, res: Response) => {
-  try {
-    const count = await pollGmail();
-    res.json({ success: true, processed: count });
-  } catch (err: any) {
-    console.error("[Poll Error]", err);
-    res.status(500).json({ error: err.message });
-  }
+  const result = await pollGmail("new");
+  if (result.busy) return res.status(409).json({ error: "En hämtning pågår redan", status: result });
+  if (result.error && result.created === 0) return res.status(502).json({ error: result.error, status: result });
+  res.json({ success: true, processed: result.created, status: result });
 });
 
-// Notifications
+// Re-reads every mail from every sender in the background. Statuses, manual
+// edits and deleted invoices are preserved. Progress: GET /api/reprocess.
+router.post("/reprocess", requireAdmin, (_req: Request, res: Response) => {
+  if (getPollStatus().running) return res.status(409).json({ error: "En hämtning pågår redan", status: getPollStatus() });
+  pollGmail("all").catch((err) => console.error("[Reprocess]", err));
+  res.status(202).json({ success: true, started: true });
+});
+
+router.get("/reprocess", (_req: Request, res: Response) => {
+  res.json(getPollStatus());
+});
+
+// ---- Notifications ----
+
 router.get("/notifications", (_req: Request, res: Response) => {
   res.json({ unread: getUnreadCount(), notifications: getUnreadNotifications() });
 });

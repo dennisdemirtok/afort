@@ -1,55 +1,52 @@
-<!DOCTYPE html>
-<html class="light" lang="sv">
-<head>
-  <title>AFORT - Betalfiler</title>
-  <%- include('partials/head') %>
-</head>
-<body class="flex min-h-screen">
-  <%- include('partials/navbar') %>
-  <main class="flex-grow pt-24 pb-12 px-8 ml-64 max-w-7xl mx-auto">
-    <section class="mb-10 flex items-center justify-between">
-      <div>
-        <h1 class="text-4xl font-extrabold font-manrope tracking-tight mb-2">Betalfiler</h1>
-        <p class="text-[#566168] text-sm">Genererade pain.001-filer for Nordea.</p>
-      </div>
-      <a href="/payment-files/create" class="bg-gradient-to-br from-[#0c56d0] to-[#004aba] text-white font-manrope font-bold py-3 px-6 rounded-xl shadow-lg shadow-[#0c56d0]/20 hover:opacity-95 active:scale-[0.98] transition-all flex items-center gap-2 text-sm">
-        <span class="material-symbols-outlined text-sm">add</span> Skapa ny betalfil
-      </a>
-    </section>
+<%- include('partials/head', { title: 'Betalfiler' }) %>
+<%- include('partials/shell-top') %>
 
-    <div class="bg-white rounded-xl overflow-hidden shadow-[0_32px_48px_-12px_rgba(41,52,58,0.06)]">
-      <table class="w-full text-left border-collapse">
-        <thead>
-          <tr class="bg-[#f0f4f8]">
-            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Skapad</th>
-            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Filnamn</th>
-            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Transaktioner</th>
-            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-right">Totalbelopp</th>
-            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Exekveringsdatum</th>
-            <th class="px-6 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-center">Ladda ner</th>
+<div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <h1 class="page-title">Betalfiler</h1>
+    <p class="page-subtitle">Filer i formatet pain.001 som importeras i Nordea Business för att betala flera fakturor på en gång.</p>
+  </div>
+  <a href="/payment-files/create" class="btn btn-primary"><span class="icon">add</span>Skapa betalfil</a>
+</div>
+
+<div class="card overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="w-full border-collapse">
+      <thead class="border-b border-line bg-surface-low">
+        <tr>
+          <th class="th">Skapad</th>
+          <th class="th">Filnamn</th>
+          <th class="th text-right">Betalningar</th>
+          <th class="th text-right">Totalbelopp</th>
+          <th class="th">Betaldatum</th>
+          <th class="th w-12"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        <% if (files.length === 0) { %>
+          <tr>
+            <td colspan="6" class="px-6 py-16 text-center">
+              <span class="icon icon-xl mb-3 block text-ink-faint/60">payments</span>
+              <p class="font-display font-bold">Inga betalfiler ännu</p>
+              <p class="mx-auto mt-1 max-w-md text-sm text-ink-muted">Godkänn de fakturor som ska betalas, skapa sedan en betalfil och importera den i Nordea.</p>
+              <a href="/payment-files/create" class="btn btn-secondary mt-5"><span class="icon">add</span>Skapa betalfil</a>
+            </td>
           </tr>
-        </thead>
-        <tbody class="divide-y divide-[#f0f4f8]">
-          <% if (files.length === 0) { %>
-            <tr><td colspan="6" class="px-6 py-12 text-center text-[#566168]">Inga betalfiler skapade ännu</td></tr>
-          <% } %>
-          <% files.forEach(function(f) { %>
-            <tr class="hover:bg-[#f7f9fc] transition-colors">
-              <td class="px-6 py-5 text-sm"><%= f.created_at ? f.created_at.substring(0,10) : '-' %></td>
-              <td class="px-6 py-5 text-sm font-mono"><%= f.filename %></td>
-              <td class="px-6 py-5 text-sm"><%= f.num_transactions %></td>
-              <td class="px-6 py-5 text-sm font-bold text-right"><%= f.total_amount ? Number(f.total_amount).toFixed(2) : '-' %> <%= f.currency %></td>
-              <td class="px-6 py-5 text-sm"><%= f.execution_date %></td>
-              <td class="px-6 py-5 text-center">
-                <a href="/payment-files/<%= f.id %>/download" class="text-[#566168] hover:text-[#0c56d0] transition-colors">
-                  <span class="material-symbols-outlined">download</span>
-                </a>
-              </td>
-            </tr>
-          <% }); %>
-        </tbody>
-      </table>
-    </div>
-  </main>
-</body>
-</html>
+        <% } %>
+        <% files.forEach(function (f) { %>
+          <tr class="hover:bg-surface-low">
+            <td class="td whitespace-nowrap text-ink-muted"><%= h.date(f.created_at) %></td>
+            <td class="td font-mono text-[13px]"><%= f.filename %></td>
+            <td class="td text-right tabular-nums"><%= f.num_transactions %></td>
+            <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= h.money(f.total_amount, f.currency) %></td>
+            <td class="td whitespace-nowrap"><%= f.execution_date %></td>
+            <td class="td text-center">
+              <a href="/payment-files/<%= f.id %>/download" class="inline-flex rounded p-1 text-ink-faint hover:bg-surface-mid hover:text-primary" title="Ladda ner XML" aria-label="Ladda ner <%= f.filename %>"><span class="icon">download</span></a>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<%- include('partials/shell-bottom') %>

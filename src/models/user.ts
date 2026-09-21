@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 
+export const ADMIN_EMAIL = "admin@afort.local";
+
 export interface User {
   id: string;
   name: string;
@@ -17,72 +19,78 @@ function generateToken(): string {
   return crypto.randomBytes(24).toString("hex");
 }
 
-function generatePassword(): string {
-  return crypto.randomBytes(8).toString("base64url");
-}
-
-export function createUser(name: string, email: string, role = "viewer"): User {
-  const db = getDb();
-  const id = uuidv4();
-  const token = generateToken();
-  db.prepare("INSERT INTO users (id, name, email, token, role) VALUES (?, ?, ?, ?, ?)").run(id, name, email, token, role);
-  return db.prepare("SELECT * FROM users WHERE id = ?").get(id) as User;
+export function generatePassword(): string {
+  return crypto.randomBytes(9).toString("base64url");
 }
 
 export function createUserWithPassword(name: string, email: string, password: string, role = "viewer"): User {
   const db = getDb();
   const id = uuidv4();
-  const token = generateToken();
-  const password_hash = bcrypt.hashSync(password, 10);
-  db.prepare("INSERT INTO users (id, name, email, token, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)").run(id, name, email, token, password_hash, role);
+  db.prepare("INSERT INTO users (id, name, email, token, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)").run(
+    id, name.trim(), email.trim().toLowerCase(), generateToken(), bcrypt.hashSync(password, 10), role
+  );
   return db.prepare("SELECT * FROM users WHERE id = ?").get(id) as User;
 }
 
 export function verifyPassword(email: string, password: string): User | null {
-  const db = getDb();
-  const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as User | undefined;
-  if (!user) return null;
-  // If user has no password_hash, fall back to token check (backward compat)
-  if (!user.password_hash) return null;
-  if (!bcrypt.compareSync(password, user.password_hash)) return null;
-  return user;
+  const user = getUserByEmail(email);
+  if (!user || !user.password_hash) return null;
+  return bcrypt.compareSync(password, user.password_hash) ? user : null;
+}
+
+/** Sets a new password and signs the user out everywhere by rotating the session token. */
+export function setPassword(userId: string, password: string): void {
+  getDb().prepare("UPDATE users SET password_hash = ?, token = ? WHERE id = ?").run(
+    bcrypt.hashSync(password, 10), generateToken(), userId
+  );
+}
+
+export function getUserById(id: string): User | undefined {
+  return getDb().prepare("SELECT * FROM users WHERE id = ?").get(id) as User | undefined;
 }
 
 export function getUserByEmail(email: string): User | undefined {
-  const db = getDb();
-  return db.prepare("SELECT * FROM users WHERE email = ?").get(email) as User | undefined;
-}
-
-export function listUsers(): User[] {
-  const db = getDb();
-  return db.prepare("SELECT * FROM users ORDER BY created_at").all() as User[];
+  return getDb().prepare("SELECT * FROM users WHERE email = ?").get(email.trim().toLowerCase()) as User | undefined;
 }
 
 export function getUserByToken(token: string): User | undefined {
-  const db = getDb();
-  return db.prepare("SELECT * FROM users WHERE token = ?").get(token) as User | undefined;
+  if (!token) return undefined;
+  return getDb().prepare("SELECT * FROM users WHERE token = ?").get(token) as User | undefined;
 }
 
-export function removeUserByEmail(email: string): void {
-  const db = getDb();
-  db.prepare("DELETE FROM users WHERE email = ?").run(email);
+export function getAdminUser(): User | undefined {
+  return getUserByEmail(ADMIN_EMAIL);
 }
 
-export function ensureAdminExists(adminToken: string): void {
+export function listUsers(): User[] {
+  return getDb().prepare("SELECT * FROM users ORDER BY role = 'admin' DESC, created_at").all() as User[];
+}
+
+export function removeUser(id: string): void {
+  getDb().prepare("DELETE FROM users WHERE id = ? AND role != 'admin'").run(id);
+}
+
+/**
+ * Makes sure the built-in admin account exists. AUTH_TOKEN is its initial
+ * password; a password changed later in the app is left alone.
+ */
+export function ensureAdminExists(initialPassword: string): void {
   const db = getDb();
-  const password_hash = bcrypt.hashSync(adminToken, 10);
-  const existing = db.prepare("SELECT id, password_hash FROM users WHERE email = 'admin@afort.local'").get() as { id: string; password_hash: string | null } | undefined;
+  const existing = getAdminUser();
 
   if (!existing) {
-    // No admin yet — create one
-    const id = uuidv4();
     db.prepare("INSERT INTO users (id, name, email, token, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)").run(
-      id, "Admin", "admin@afort.local", adminToken, password_hash, "admin"
+      uuidv4(), "Admin", ADMIN_EMAIL, generateToken(), bcrypt.hashSync(initialPassword, 10), "admin"
     );
-  } else if (!existing.password_hash) {
-    // Admin exists but has no password (created before password auth) — set it now
-    db.prepare("UPDATE users SET password_hash = ?, token = ? WHERE id = ?").run(password_hash, adminToken, existing.id);
+    return;
+  }
+
+  if (!existing.password_hash) {
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(bcrypt.hashSync(initialPassword, 10), existing.id);
+  }
+  // Earlier versions used AUTH_TOKEN itself as the session token, which put the
+  // admin password in the cookie. Replace it with a random token.
+  if (existing.token === initialPassword) {
+    db.prepare("UPDATE users SET token = ? WHERE id = ?").run(generateToken(), existing.id);
   }
 }
-
-export { generatePassword };

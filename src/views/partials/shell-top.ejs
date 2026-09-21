@@ -1,0 +1,72 @@
+<%
+  var nav = [
+    { href: "/invoices", icon: "receipt_long", label: "Fakturor", match: /^\/invoices/ },
+    { href: "/bank-upload", icon: "account_balance", label: "Bankutdrag", match: /^\/bank-upload/ },
+    { href: "/payment-files", icon: "payments", label: "Betalfiler", match: /^\/payment-files/ },
+  ];
+  if (user && user.role === "admin") nav.push({ href: "/settings", icon: "settings", label: "Inställningar", match: /^\/settings/ });
+%>
+<body class="min-h-screen">
+  <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] btn btn-primary">Hoppa till innehållet</a>
+
+  <!-- Sidebar -->
+  <div id="nav-overlay" class="fixed inset-0 z-40 hidden bg-ink/40 lg:hidden" onclick="toggleNav(false)"></div>
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col border-r border-line bg-white px-4 py-6 transition-transform duration-200 lg:translate-x-0" aria-label="Huvudmeny">
+    <a href="/invoices" class="mb-8 flex items-center gap-3 px-2">
+      <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary font-display text-lg font-extrabold text-white">A</span>
+      <span class="flex flex-col leading-tight">
+        <span class="font-display text-lg font-extrabold tracking-tight">AFORT</span>
+        <span class="text-[10px] font-bold uppercase tracking-widest text-ink-faint">Faktura-automat</span>
+      </span>
+    </a>
+
+    <nav class="flex-grow space-y-1">
+      <% nav.forEach(function (item) { var active = item.match.test(currentPath); %>
+        <a href="<%= item.href %>" class="nav-link <%= active ? 'nav-link-active' : '' %>" <%- active ? 'aria-current="page"' : '' %>>
+          <span class="icon"><%= item.icon %></span><%= item.label %>
+        </a>
+      <% }); %>
+    </nav>
+
+    <div class="space-y-1 border-t border-line pt-4">
+      <a href="/account" class="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-surface-mid <%= /^\/account/.test(currentPath) ? 'bg-surface-mid' : '' %>">
+        <span class="avatar rounded-full"><%= h.initials(user.name) %></span>
+        <span class="min-w-0 leading-tight">
+          <span class="block truncate text-sm font-semibold"><%= user.name %></span>
+          <span class="block truncate text-xs text-ink-muted"><%= h.roleLabel(user.role) %></span>
+        </span>
+      </a>
+      <a href="/logout" class="nav-link hover:bg-red-50 hover:text-red-600"><span class="icon">logout</span>Logga ut</a>
+    </div>
+  </aside>
+
+  <div class="lg:pl-64">
+    <!-- Top bar -->
+    <header class="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-white/85 px-4 backdrop-blur sm:px-8">
+      <button type="button" class="btn btn-ghost -ml-2 px-2 lg:hidden" onclick="toggleNav(true)" aria-label="Öppna menyn"><span class="icon icon-lg">menu</span></button>
+
+      <form method="GET" action="/invoices" class="relative max-w-md flex-grow" role="search">
+        <span class="icon pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint">search</span>
+        <input type="search" name="q" value="<%= locals.filters && filters.q ? filters.q : '' %>" placeholder="Sök leverantör, fakturanummer eller OCR…" aria-label="Sök fakturor"
+               class="w-full rounded-lg border-transparent bg-surface-low py-2 pl-10 pr-3 text-sm placeholder:text-ink-faint focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15"/>
+      </form>
+
+      <div class="ml-auto flex items-center gap-1">
+        <div class="relative" id="notif-wrapper">
+          <button type="button" onclick="toggleNotifications()" class="btn btn-ghost relative px-2" aria-label="Notiser" aria-haspopup="true" aria-expanded="false" id="notif-button">
+            <span class="icon icon-lg">notifications</span>
+            <span id="notif-badge" class="absolute right-0.5 top-0.5 hidden h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
+          </button>
+          <div id="notif-dropdown" class="absolute right-0 top-12 z-50 hidden w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-line bg-white shadow-pop">
+            <div class="flex items-center justify-between border-b border-line px-4 py-3">
+              <span class="font-display text-sm font-bold">Notiser</span>
+              <button type="button" onclick="markAllNotificationsRead()" class="text-xs font-semibold text-primary hover:underline">Markera alla som lästa</button>
+            </div>
+            <div id="notif-list" class="max-h-96 overflow-y-auto"></div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" class="mx-auto max-w-[1400px] px-4 py-8 sm:px-8">
+      <%- include('flash') %>

@@ -1,0 +1,6 @@
+<% if (locals.ok) { %>
+  <div class="flash flash-ok" role="status"><span class="icon">check_circle</span><span><%= ok %></span></div>
+<% } %>
+<% if (locals.err) { %>
+  <div class="flash flash-err" role="alert"><span class="icon">error</span><span><%= err %></span></div>
+<% } %>

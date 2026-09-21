@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import path from "path";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
@@ -6,71 +6,101 @@ import cron from "node-cron";
 import { env } from "./config/env";
 import { getDb } from "./models/database";
 import { requireAuth } from "./middleware/auth";
-import { pollGmail } from "./services/gmail";
+import { pollGmail, isGmailConfigured } from "./services/gmail";
 import { ensureAdminExists } from "./models/user";
+import { repairInvoiceNumbersFromSubjects } from "./models/invoice";
+import { viewHelpers, buildIconFontUrl } from "./routes/shared";
 import apiRoutes from "./routes/api";
 import webRoutes from "./routes/web";
 
 const app = express();
 
-// Middleware
+// Railway terminates TLS in a proxy; without this every visitor shares one IP for rate limiting
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), { maxAge: env.isProduction ? "1h" : 0 }));
 
-// Rate limiting
-app.use("/api/", rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
-
-// View engine
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-// Initialize DB and ensure admin account exists
+// Available in every template
+app.locals.h = viewHelpers;
+app.locals.iconFontUrl = buildIconFontUrl(path.join(__dirname, "views"));
+app.locals.assetVersion = Date.now().toString(36);
+app.use((req, res, next) => {
+  res.locals.currentPath = req.path;
+  res.locals.user = null;
+  next();
+});
+
 getDb();
 ensureAdminExists(env.authToken);
+const repairedNumbers = repairInvoiceNumbersFromSubjects();
+if (repairedNumbers > 0) console.log(`[AFORT] Repaired ${repairedNumbers} invoice numbers from subject lines`);
+if (env.authToken === "change-me") {
+  console.warn("[AFORT] AUTH_TOKEN is not set – the admin password is the insecure default.");
+}
 
-// Public routes
-app.get("/login", (req, res, next) => next());
-app.post("/login", (req, res, next) => next());
-app.get("/auth/google", (req, res, next) => next());
-app.get("/auth/google/callback", (req, res, next) => next());
+// Brute force protection for the login form
+app.post("/login", rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).render("error", {
+    title: "För många inloggningsförsök",
+    message: "Vänta en kvart och försök igen.",
+  }),
+}));
+app.use("/api/", rateLimit({ windowMs: 15 * 60 * 1000, max: 1500, standardHeaders: true, legacyHeaders: false }));
 
-// Auth for everything else
+// Everything except the login page and the Google OAuth callback requires a session
+const PUBLIC_PATHS = ["/login", "/auth/google/callback"];
 app.use((req, res, next) => {
-  if (["/login", "/auth/google", "/auth/google/callback"].includes(req.path)) return next();
-  if (req.path.startsWith("/css/") || req.path.startsWith("/js/")) return next();
+  if (PUBLIC_PATHS.includes(req.path)) return next();
   requireAuth(req, res, next);
 });
 
-// Routes
 app.use("/api", apiRoutes);
 app.use("/", webRoutes);
 
-app.listen(env.port, () => {
-  console.log(`[AFORT] Server running on port ${env.port}`);
-  console.log(`[AFORT] Environment: ${env.nodeEnv}`);
+app.use((req: Request, res: Response) => {
+  if (req.originalUrl.startsWith("/api/")) return res.status(404).json({ error: "Not found" });
+  res.status(404).render("error", { title: "Sidan finns inte", message: "Adressen du försökte nå finns inte i AFORT." });
+});
 
-  // Start automatic Gmail polling every 15 minutes
-  cron.schedule("*/15 * * * *", async () => {
-    try {
-      const count = await pollGmail();
-      if (count > 0) console.log(`[Cron] Polled ${count} new invoices`);
-    } catch (err) {
-      console.error("[Cron] Poll failed:", err);
-    }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  console.error("[AFORT] Unhandled error:", err);
+  if (res.headersSent) return;
+  const tooLarge = err?.code === "LIMIT_FILE_SIZE";
+  if (req.originalUrl.startsWith("/api/")) return res.status(tooLarge ? 413 : 500).json({ error: tooLarge ? "Filen är för stor" : "Internt fel" });
+  res.status(tooLarge ? 413 : 500).render("error", {
+    title: tooLarge ? "Filen är för stor" : "Något gick fel",
+    message: tooLarge ? "Filen får vara högst 5 MB." : "Ett oväntat fel inträffade. Försök igen om en stund.",
   });
-  console.log("[AFORT] Gmail polling scheduled every 15 minutes");
+});
 
-  // Run initial poll on startup (after 10 sec delay to let server stabilize)
-  setTimeout(async () => {
-    try {
-      const count = await pollGmail();
-      console.log(`[AFORT] Initial poll: ${count} new invoices`);
-    } catch (err) {
-      console.error("[AFORT] Initial poll failed:", err);
-    }
+app.listen(env.port, () => {
+  console.log(`[AFORT] Server running on port ${env.port} (${env.isProduction ? "production" : "development"})`);
+
+  if (!isGmailConfigured()) {
+    console.warn("[AFORT] Gmail is not configured – automatic fetching is off.");
+    return;
+  }
+
+  // New invoices every 15 minutes, plus once shortly after start
+  cron.schedule("*/15 * * * *", () => {
+    pollGmail("new").catch((err) => console.error("[Cron] Poll failed:", err));
+  });
+  setTimeout(() => {
+    pollGmail("new").catch((err) => console.error("[AFORT] Initial poll failed:", err));
   }, 10000);
+  console.log("[AFORT] Gmail polling scheduled every 15 minutes");
 });
 
 export default app;

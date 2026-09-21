@@ -1,132 +1,289 @@
-<!DOCTYPE html>
-<html class="light" lang="sv">
-<head>
-  <title>AFORT - Fakturor</title>
-  <%- include('partials/head') %>
-</head>
-<body class="flex min-h-screen">
-  <%- include('partials/navbar') %>
+<%- include('partials/head', { title: 'Fakturor' }) %>
+<%- include('partials/shell-top') %>
+<%
+  var isAdmin = user.role === 'admin';
+  var tabs = [
+    { key: '', label: 'Alla', count: counts.all },
+    { key: 'new', label: 'Nya', count: counts.new },
+    { key: 'approved', label: 'Godkända', count: counts.approved },
+    { key: 'exported', label: 'Exporterade', count: counts.exported },
+    { key: 'paid', label: 'Betalda', count: counts.paid },
+  ];
+  var totals = function (list) {
+    return list.length ? list.map(function (t) { return h.money(t.total, t.currency); }).join(' + ') : '0,00';
+  };
+%>
 
-  <main class="flex-grow pt-24 pb-12 px-8 ml-64 max-w-7xl mx-auto">
-    <section class="mb-10">
-      <h1 class="text-4xl font-extrabold font-manrope tracking-tight mb-2">Fakturor</h1>
-      <p class="text-[#566168] text-sm">Hantera och automatisera ditt kassaflöde effektivt.</p>
-    </section>
+<div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <h1 class="page-title">Fakturor</h1>
+    <p class="page-subtitle">Hämtas automatiskt från Gmail var 15:e minut.</p>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    <button type="button" id="poll-button" class="btn btn-secondary" onclick="pollNow(this)">
+      <span class="icon">sync</span><span data-label>Hämta nya nu</span>
+    </button>
+    <a href="/api/export/csv<%= h.filterQuery(filters) %>" class="btn btn-secondary" title="Exporterar de fakturor som visas med nuvarande filter">
+      <span class="icon">download</span>Exportera CSV
+    </a>
+  </div>
+</div>
 
-    <div class="flex flex-wrap gap-4 mb-8 items-center justify-between">
-      <div class="bg-[#f0f4f8] p-1.5 rounded-xl flex gap-1 items-center flex-wrap">
-        <a href="/invoices" class="px-5 py-2.5 rounded-lg text-sm font-semibold <% if (!filters.status) { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Alla <span class="ml-1 opacity-50"><%= counts.all %></span></a>
-        <a href="/invoices?status=new" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'new') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Nya <span class="ml-1 opacity-50"><%= counts.new %></span></a>
-        <a href="/invoices?status=approved" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'approved') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Godkända <span class="ml-1 opacity-50"><%= counts.approved %></span></a>
-        <a href="/invoices?status=exported" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'exported') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Exporterade <span class="ml-1 opacity-50"><%= counts.exported %></span></a>
-        <a href="/invoices?status=paid" class="px-5 py-2.5 rounded-lg text-sm font-medium <% if (filters.status === 'paid') { %>bg-white shadow-sm text-[#0c56d0]<% } else { %>text-[#566168] hover:bg-[#e8eff4]<% } %> transition-all">Betalda <span class="ml-1 opacity-50"><%= counts.paid %></span></a>
-      </div>
+<!-- Overview -->
+<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+  <a href="/invoices" class="card block p-5 transition hover:border-primary/40">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Att betala</span>
+      <span class="icon text-primary">account_balance_wallet</span>
     </div>
-
-    <!-- Bulk action toolbar (hidden by default, shown when items selected) -->
-    <div id="bulk-toolbar" class="hidden mb-4 bg-white rounded-xl shadow-lg border border-blue-200 px-6 py-3 flex items-center justify-between">
-      <span class="text-sm font-medium text-slate-700"><span id="selected-count">0</span> markerade</span>
-      <div class="flex items-center gap-2">
-        <button onclick="bulkAction('approved')" class="px-3 py-1.5 text-xs font-bold bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors">Godkänn</button>
-        <button onclick="bulkAction('paid')" class="px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors">Markera betald</button>
-        <button onclick="bulkAction('new')" class="px-3 py-1.5 text-xs font-bold bg-slate-50 text-slate-700 rounded-lg hover:bg-slate-100 transition-colors">Återställ</button>
-        <div class="w-px h-6 bg-slate-200 mx-1"></div>
-        <button onclick="bulkAction('delete')" class="px-3 py-1.5 text-xs font-bold bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">Radera</button>
-      </div>
+    <div class="mt-2 font-display text-2xl font-extrabold"><%= stats.unpaidCount %> <span class="text-base font-semibold text-ink-muted">fakturor</span></div>
+    <div class="mt-1 text-sm text-ink-muted"><%= totals(stats.unpaidTotals) %></div>
+  </a>
+  <a href="/invoices?overdue=1" class="card block p-5 transition <%= stats.overdueCount ? 'border-red-200 bg-red-50/40 hover:border-red-300' : 'hover:border-primary/40' %>">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-semibold uppercase tracking-wider <%= stats.overdueCount ? 'text-red-700' : 'text-ink-muted' %>">Förfallna</span>
+      <span class="icon <%= stats.overdueCount ? 'text-red-600' : 'text-emerald-600' %>"><%= stats.overdueCount ? 'warning' : 'check_circle' %></span>
     </div>
-
-    <div class="bg-white rounded-xl overflow-hidden shadow-[0_32px_48px_-12px_rgba(41,52,58,0.06)]">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse">
-          <thead>
-            <tr class="bg-[#f0f4f8]">
-              <th class="px-4 py-4 w-10"><input type="checkbox" id="select-all" class="rounded border-slate-300" onchange="toggleAll(this)"/></th>
-              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Datum</th>
-              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Leverantör</th>
-              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Fakturanr.</th>
-              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-right">Belopp</th>
-              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Förfaller</th>
-              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168]">Status</th>
-              <th class="px-4 py-4 text-xs font-bold font-manrope uppercase tracking-wider text-[#566168] text-center w-16">PDF</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-[#f0f4f8]">
-            <% if (invoices.length === 0) { %>
-              <tr><td colspan="8" class="px-6 py-12 text-center text-[#566168]">Inga fakturor hittades</td></tr>
-            <% } %>
-            <% invoices.forEach(function(inv) {
-              var initials = (inv.vendor_name || '??').substring(0,2).toUpperCase();
-              var sc = inv.status === 'new' ? 'bg-[#0c56d0] text-white' : inv.status === 'approved' ? 'bg-emerald-600 text-white' : inv.status === 'exported' ? 'bg-amber-500 text-white' : 'border-2 border-emerald-600 text-emerald-600';
-              var sl = inv.status === 'new' ? 'Ny' : inv.status === 'approved' ? 'Godkänd' : inv.status === 'exported' ? 'Exporterad' : 'Betald';
-              var amt = inv.amount ? Number(inv.amount).toFixed(2) + ' ' + (inv.currency || '') : '-';
-              var ds = inv.received_at ? inv.received_at.substring(0,10) : '-';
-            %>
-            <tr class="group hover:bg-[#f7f9fc] transition-colors">
-              <td class="px-4 py-5" onclick="event.stopPropagation()"><input type="checkbox" class="inv-check rounded border-slate-300" value="<%= inv.id %>" onchange="updateToolbar()"/></td>
-              <td class="px-4 py-5 text-sm cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'"><%= ds %></td>
-              <td class="px-4 py-5 cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'">
-                <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-lg bg-[#0c56d0]/10 flex items-center justify-center text-[#0c56d0] font-bold text-xs"><%= initials %></div>
-                  <span class="text-sm font-semibold"><%= inv.vendor_name || '-' %></span>
-                </div>
-              </td>
-              <td class="px-4 py-5 text-sm font-mono text-[#566168] cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'"><%= inv.invoice_number || '-' %></td>
-              <td class="px-4 py-5 text-sm font-bold text-right cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'"><%= amt %></td>
-              <td class="px-4 py-5 text-sm text-[#566168] cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'"><%= inv.due_date || '-' %></td>
-              <td class="px-4 py-5 cursor-pointer" onclick="location.href='/invoices/<%= inv.id %>'"><span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold <%= sc %>"><%= sl %></span></td>
-              <td class="px-4 py-5 text-center">
-                <% if (inv.pdf_path) { %>
-                  <a href="/invoices/<%= inv.id %>/pdf" class="text-[#566168] hover:text-[#0c56d0] transition-colors" onclick="event.stopPropagation()"><span class="material-symbols-outlined">picture_as_pdf</span></a>
-                <% } else { %>-<% } %>
-              </td>
-            </tr>
-            <% }); %>
-          </tbody>
-        </table>
-      </div>
-      <div class="px-6 py-4 bg-[#f0f4f8] flex justify-between items-center border-t border-[#e8eff4]">
-        <span class="text-xs text-[#566168] font-medium">Visar <%= invoices.length %> fakturor</span>
-      </div>
+    <div class="mt-2 font-display text-2xl font-extrabold <%= stats.overdueCount ? 'text-red-700' : '' %>"><%= stats.overdueCount %> <span class="text-base font-semibold <%= stats.overdueCount ? 'text-red-700/70' : 'text-ink-muted' %>">fakturor</span></div>
+    <div class="mt-1 text-sm <%= stats.overdueCount ? 'text-red-700/80' : 'text-ink-muted' %>"><%= stats.overdueCount ? totals(stats.overdueTotals) : 'Inget har passerat förfallodatum' %></div>
+  </a>
+  <a href="/invoices?status=new" class="card block p-5 transition hover:border-primary/40">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Nya att granska</span>
+      <span class="icon text-primary">mark_email_unread</span>
     </div>
-  </main>
+    <div class="mt-2 font-display text-2xl font-extrabold"><%= stats.newCount %> <span class="text-base font-semibold text-ink-muted">fakturor</span></div>
+    <div class="mt-1 text-sm text-ink-muted">
+      <% if (stats.missingDataCount) { %><%= stats.missingDataCount %> saknar belopp eller fakturanummer<% } else { %>Alla har belopp och fakturanummer<% } %>
+    </div>
+  </a>
+</div>
+
+<!-- Filters -->
+<div class="mb-4 flex flex-wrap items-center gap-3">
+  <div class="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-surface-mid p-1" role="tablist" aria-label="Status">
+    <% tabs.forEach(function (tab) { var active = (filters.status || '') === tab.key; %>
+      <a href="/invoices<%= h.filterQuery(filters, { status: tab.key || undefined }) %>" class="tab <%= active ? 'tab-active' : '' %>" role="tab" aria-selected="<%= active %>">
+        <%= tab.label %> <span class="ml-1 text-xs font-normal opacity-60"><%= tab.count %></span>
+      </a>
+    <% }); %>
+  </div>
+
+  <form method="GET" action="/invoices" class="ml-auto flex items-center gap-2">
+    <% if (filters.status) { %><input type="hidden" name="status" value="<%= filters.status %>"/><% } %>
+    <% if (filters.q) { %><input type="hidden" name="q" value="<%= filters.q %>"/><% } %>
+    <% if (filters.overdue) { %><input type="hidden" name="overdue" value="1"/><% } %>
+    <% if (filters.duplicates) { %><input type="hidden" name="duplicates" value="1"/><% } %>
+    <label class="sr-only" for="vendor-filter">Leverantör</label>
+    <select id="vendor-filter" name="vendor" class="input w-auto min-w-[12rem] py-2 pr-9" onchange="this.form.submit()">
+      <option value="">Alla leverantörer</option>
+      <% vendors.forEach(function (v) { %>
+        <option value="<%= v %>" <%= filters.vendor === v ? 'selected' : '' %>><%= v %></option>
+      <% }); %>
+    </select>
+  </form>
+</div>
+
+<% if (filters.q || filters.overdue || filters.duplicates || filters.vendor) { %>
+  <div class="mb-4 flex flex-wrap items-center gap-2 text-sm">
+    <span class="text-ink-muted">Filter:</span>
+    <% if (filters.q) { %><a href="/invoices<%= h.filterQuery(filters, { q: undefined }) %>" class="badge badge-neutral hover:bg-slate-200">Sökning: “<%= filters.q %>” <span class="icon icon-sm">close</span></a><% } %>
+    <% if (filters.vendor) { %><a href="/invoices<%= h.filterQuery(filters, { vendor: undefined }) %>" class="badge badge-neutral hover:bg-slate-200"><%= filters.vendor %> <span class="icon icon-sm">close</span></a><% } %>
+    <% if (filters.overdue) { %><a href="/invoices<%= h.filterQuery(filters, { overdue: undefined }) %>" class="badge badge-overdue hover:bg-red-200">Förfallna <span class="icon icon-sm">close</span></a><% } %>
+    <% if (filters.duplicates) { %><a href="/invoices<%= h.filterQuery(filters, { duplicates: undefined }) %>" class="badge badge-neutral hover:bg-slate-200">Möjliga dubbletter <span class="icon icon-sm">close</span></a><% } %>
+    <a href="/invoices" class="text-xs font-semibold text-primary hover:underline">Rensa alla</a>
+  </div>
+<% } %>
+
+<% if (filters.duplicates && invoices.length) { %>
+  <div class="flash flash-info"><span class="icon">info</span><span>Raderna nedan är kopior av fakturor som redan finns (samma leverantör, fakturanummer och belopp) – oftast påminnelser eller vidarebefordrade mail. Originalet visas inte här och ligger kvar om du raderar dessa.</span></div>
+<% } %>
+
+<!-- Table -->
+<div class="card overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="w-full border-collapse">
+      <thead class="border-b border-line bg-surface-low">
+        <tr>
+          <th class="th w-10"><input type="checkbox" id="select-all" class="rounded border-slate-300 text-primary focus:ring-primary/30" aria-label="Markera alla på sidan" onchange="toggleAll(this)"/></th>
+          <th class="th">Mottagen</th>
+          <th class="th">Leverantör</th>
+          <th class="th">Fakturanr.</th>
+          <th class="th text-right">Belopp</th>
+          <th class="th">Förfaller</th>
+          <th class="th">Status</th>
+          <th class="th w-12 text-center">PDF</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        <% if (invoices.length === 0) { %>
+          <tr>
+            <td colspan="8" class="px-6 py-16 text-center">
+              <span class="icon icon-xl mb-3 block text-ink-faint/60">inbox</span>
+              <p class="font-display font-bold"><%= counts.all === 0 && !filters.q && !filters.vendor && !filters.overdue && !filters.duplicates ? 'Inga fakturor ännu' : 'Inga fakturor matchar filtret' %></p>
+              <p class="mt-1 text-sm text-ink-muted"><%= counts.all === 0 ? 'Nya fakturor dyker upp här när de kommer in i Gmail.' : 'Prova att ändra status, leverantör eller sökord.' %></p>
+            </td>
+          </tr>
+        <% } %>
+        <% invoices.forEach(function (inv) { var overdue = h.isOverdue(inv); %>
+          <tr class="group cursor-pointer transition-colors hover:bg-surface-low" data-href="/invoices/<%= inv.id %>">
+            <td class="td"><input type="checkbox" class="inv-check rounded border-slate-300 text-primary focus:ring-primary/30" value="<%= inv.id %>" aria-label="Markera faktura <%= inv.invoice_number || '' %>" onchange="updateToolbar()"/></td>
+            <td class="td whitespace-nowrap text-ink-muted"><%= h.date(inv.received_at) %></td>
+            <td class="td">
+              <a href="/invoices/<%= inv.id %>" class="flex items-center gap-3">
+                <span class="avatar"><%= h.initials(inv.vendor_name) %></span>
+                <span class="font-semibold group-hover:text-primary"><%= inv.vendor_name || 'Okänd leverantör' %></span>
+              </a>
+            </td>
+            <td class="td whitespace-nowrap font-mono text-[13px] text-ink-muted">
+              <% if (inv.invoice_number) { %><%= inv.invoice_number %><% } else { %><span class="badge badge-neutral font-sans">Saknas</span><% } %>
+            </td>
+            <td class="td whitespace-nowrap text-right font-semibold tabular-nums">
+              <% if (inv.amount != null) { %><%= h.money(inv.amount) %> <span class="text-xs font-medium text-ink-muted"><%= inv.currency %></span><% } else { %><span class="badge badge-neutral">Saknas</span><% } %>
+            </td>
+            <td class="td whitespace-nowrap">
+              <% if (overdue) { %>
+                <span class="font-medium text-red-700"><%= inv.due_date %></span>
+                <span class="badge badge-overdue ml-1"><%= h.daysOverdue(inv.due_date) %> d</span>
+              <% } else { %>
+                <span class="text-ink-muted"><%= inv.due_date || '–' %></span>
+              <% } %>
+            </td>
+            <td class="td whitespace-nowrap">
+              <span class="badge badge-<%= inv.status %>"><%= h.statusLabel(inv.status) %></span>
+              <% if (inv.status === 'paid' && inv.paid_at) { %><span class="ml-1 text-xs text-ink-faint"><%= inv.paid_at %></span><% } %>
+            </td>
+            <td class="td text-center">
+              <% if (inv.pdf_path) { %>
+                <a href="/invoices/<%= inv.id %>/pdf" class="inline-flex rounded p-1 text-ink-faint hover:bg-surface-mid hover:text-primary" title="Ladda ner PDF" aria-label="Ladda ner PDF"><span class="icon">picture_as_pdf</span></a>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface-low px-4 py-3 text-xs text-ink-muted">
+    <span>
+      <% if (total === 0) { %>0 fakturor<% } else { %>
+        Visar <%= (page - 1) * pageSize + 1 %>–<%= (page - 1) * pageSize + invoices.length %> av <%= total %> fakturor
+      <% } %>
+    </span>
+    <% if (pages > 1) { %>
+      <nav class="flex items-center gap-1" aria-label="Sidor">
+        <% if (page > 1) { %><a class="btn btn-secondary btn-sm" href="/invoices<%= h.filterQuery(filters, { page: page - 1 }) %>"><span class="icon icon-sm">chevron_left</span>Föregående</a><% } %>
+        <span class="px-2">Sida <%= page %> av <%= pages %></span>
+        <% if (page < pages) { %><a class="btn btn-secondary btn-sm" href="/invoices<%= h.filterQuery(filters, { page: page + 1 }) %>">Nästa<span class="icon icon-sm">chevron_right</span></a><% } %>
+      </nav>
+    <% } %>
+  </div>
+</div>
+
+<!-- Bulk actions: floats at the bottom while invoices are selected -->
+<div id="bulk-toolbar" class="pointer-events-none fixed inset-x-0 bottom-6 z-40 hidden justify-center px-4 lg:pl-64">
+  <div class="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-xl bg-ink px-4 py-3 text-white shadow-pop">
+    <span class="mr-2 text-sm font-semibold"><span id="selected-count">0</span> markerade</span>
+    <button type="button" onclick="bulkAction('approved')" class="btn btn-sm bg-white/10 text-white hover:bg-white/20"><span class="icon icon-sm">task_alt</span>Godkänn</button>
+    <button type="button" onclick="bulkAction('paid')" class="btn btn-sm bg-white/10 text-white hover:bg-white/20"><span class="icon icon-sm">paid</span>Markera betalda</button>
+    <button type="button" onclick="bulkAction('new')" class="btn btn-sm bg-white/10 text-white hover:bg-white/20"><span class="icon icon-sm">undo</span>Återställ till ny</button>
+    <button type="button" onclick="downloadZip()" class="btn btn-sm bg-white/10 text-white hover:bg-white/20"><span class="icon icon-sm">folder_zip</span>Ladda ner PDF:er</button>
+    <% if (isAdmin) { %>
+      <button type="button" onclick="bulkAction('delete')" class="btn btn-sm bg-red-500/90 text-white hover:bg-red-500"><span class="icon icon-sm">delete</span>Radera</button>
+    <% } %>
+    <button type="button" onclick="clearSelection()" class="btn btn-sm text-white/70 hover:text-white" aria-label="Avmarkera alla"><span class="icon icon-sm">close</span></button>
+  </div>
+</div>
+
+<form id="zip-form" method="POST" action="/invoices/download-zip" class="hidden"></form>
 
 <script>
-function getSelectedIds() {
-  return Array.from(document.querySelectorAll('.inv-check:checked')).map(function(cb) { return cb.value; });
-}
-
-function updateToolbar() {
-  var ids = getSelectedIds();
-  var toolbar = document.getElementById('bulk-toolbar');
-  var count = document.getElementById('selected-count');
-  if (ids.length > 0) {
-    toolbar.classList.remove('hidden');
-    count.textContent = ids.length;
-  } else {
-    toolbar.classList.add('hidden');
-  }
-}
-
-function toggleAll(master) {
-  document.querySelectorAll('.inv-check').forEach(function(cb) { cb.checked = master.checked; });
-  updateToolbar();
-}
-
-async function bulkAction(action) {
-  var ids = getSelectedIds();
-  if (ids.length === 0) return;
-  var label = action === 'delete' ? 'Radera ' + ids.length + ' fakturor?' : 'Ändra status för ' + ids.length + ' fakturor?';
-  if (!confirm(label)) return;
-
-  var token = document.cookie.match(/auth_token=([^;]+)/)?.[1] || '';
-  var res = await fetch('/api/invoices/bulk', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-    body: JSON.stringify({ ids: ids, action: action })
+  // Whole row opens the invoice, except when clicking a control inside it
+  document.querySelectorAll('tr[data-href]').forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('a, button, input, label')) return;
+      window.location.href = row.dataset.href;
+    });
   });
-  if (res.ok) location.reload();
-  else alert('Något gick fel');
-}
+
+  function getSelectedIds() {
+    return Array.from(document.querySelectorAll('.inv-check:checked')).map(function (cb) { return cb.value; });
+  }
+
+  function updateToolbar() {
+    var ids = getSelectedIds();
+    var all = document.querySelectorAll('.inv-check');
+    var toolbar = document.getElementById('bulk-toolbar');
+    toolbar.classList.toggle('hidden', ids.length === 0);
+    toolbar.classList.toggle('flex', ids.length > 0);
+    document.getElementById('selected-count').textContent = ids.length;
+    var master = document.getElementById('select-all');
+    master.checked = ids.length > 0 && ids.length === all.length;
+    master.indeterminate = ids.length > 0 && ids.length < all.length;
+  }
+
+  function toggleAll(master) {
+    document.querySelectorAll('.inv-check').forEach(function (cb) { cb.checked = master.checked; });
+    updateToolbar();
+  }
+
+  function clearSelection() {
+    document.querySelectorAll('.inv-check').forEach(function (cb) { cb.checked = false; });
+    updateToolbar();
+  }
+
+  function bulkAction(action) {
+    var ids = getSelectedIds();
+    if (!ids.length) return;
+    var n = ids.length + (ids.length === 1 ? ' faktura' : ' fakturor');
+    var question = {
+      delete: 'Radera ' + n + '? De hämtas inte in igen från Gmail.',
+      paid: 'Markera ' + n + ' som betalda?',
+      approved: 'Godkänna ' + n + '?',
+      new: 'Återställa ' + n + ' till status Ny?'
+    }[action];
+    if (!confirm(question)) return;
+
+    fetch('/api/invoices/bulk', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids, action: action })
+    }).then(function (res) {
+      if (res.ok) return window.location.reload();
+      return res.json().then(function (body) { alert(body.error || 'Något gick fel. Försök igen.'); });
+    }).catch(function () { alert('Kunde inte nå servern. Försök igen.'); });
+  }
+
+  function downloadZip() {
+    var form = document.getElementById('zip-form');
+    form.innerHTML = '';
+    getSelectedIds().forEach(function (id) {
+      var input = document.createElement('input');
+      input.type = 'hidden'; input.name = 'ids'; input.value = id;
+      form.appendChild(input);
+    });
+    form.submit();
+  }
+
+  function pollNow(button) {
+    var label = button.querySelector('[data-label]');
+    button.disabled = true;
+    button.querySelector('.icon').classList.add('animate-spin');
+    label.textContent = 'Hämtar…';
+    fetch('/api/trigger-poll', { method: 'POST', credentials: 'same-origin' })
+      .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.body.error || 'Hämtningen misslyckades');
+        var n = r.body.processed || 0;
+        window.location.href = '/invoices?ok=' + encodeURIComponent(n ? n + (n === 1 ? ' ny faktura hämtad.' : ' nya fakturor hämtade.') : 'Inga nya fakturor i Gmail just nu.');
+      })
+      .catch(function (err) {
+        button.disabled = false;
+        button.querySelector('.icon').classList.remove('animate-spin');
+        label.textContent = 'Hämta nya nu';
+        alert(err.message);
+      });
+  }
 </script>
-</body>
-</html>
+<%- include('partials/shell-bottom') %>
