@@ -45,6 +45,8 @@ function extractAmount(text: string): number | null {
   }
 
   const patterns = [
+    // Google invoices: "Totalt i EUR" with the value on the next line: "16,20 €"
+    /Totalt\s+i\s+(?:EUR|SEK|USD|DKK|GBP)\s*\n\s*([\d\s.,]*\d[.,]\d{2})\s*(?:€|kr|\$|£)?/i,
     // Polish Fancywork: "DO ZAPŁATY: €52,48" or "POZOSTAŁO DO ZAPŁATY: €52,48"
     /(?:DO ZAPŁATY|POZOSTAŁO DO ZAPŁATY)\s*:?\s*€?\s*([\d\s]+[.,]\d{2})/i,
     // Polish: "Brutto (EUR)\n52,48" — total at bottom
@@ -154,7 +156,7 @@ function extractInvoiceNumber(text: string): string | null {
     // Polish: "Nr: 8/4/2026/WDT/DTF"
     /Nr\s*:?\s*([\d/]+\/\w+(?:\/\w+)?)/i,
     // English: "Invoice No: INV-12345"
-    /(?:fakturanr|faktura\s*nr|invoice\s*(?:no|number|#))\s*:?\s*([A-Z0-9/-]{2,30})/i,
+    /(?:fakturanr|faktura\s*nr|fakturanummer|invoice\s*(?:no|number|#))\s*:?\s*([A-Z0-9/-]{2,30})/i,
   ];
   for (const p of patterns) {
     const m = text.match(p);
