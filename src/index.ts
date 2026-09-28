@@ -8,11 +8,14 @@ import { getDb } from "./models/database";
 import { requireAuth } from "./middleware/auth";
 import { pollGmail, isGmailConfigured } from "./services/gmail";
 import { ensureAdminExists } from "./models/user";
-import { repairInvoiceNumbersFromSubjects } from "./models/invoice";
+import { repairInvoiceNumbersFromSubjects, repairInvalidIbans, removeProformaInvoices } from "./models/invoice";
 import { backfillIbansFromPdfs } from "./services/maintenance";
+import { isShopifyConfigured, syncShopifyPayouts } from "./services/shopify";
 import { viewHelpers, buildIconFontUrl } from "./routes/shared";
 import apiRoutes from "./routes/api";
 import webRoutes from "./routes/web";
+import receiptRoutes from "./routes/receipts";
+import shopifyRoutes from "./routes/shopify";
 
 const app = express();
 
@@ -42,6 +45,10 @@ getDb();
 ensureAdminExists(env.authToken);
 const repairedNumbers = repairInvoiceNumbersFromSubjects();
 if (repairedNumbers > 0) console.log(`[AFORT] Repaired ${repairedNumbers} invoice numbers from subject lines`);
+const clearedIbans = repairInvalidIbans();
+if (clearedIbans > 0) console.log(`[AFORT] Cleared ${clearedIbans} invalid IBANs`);
+const removedProformas = removeProformaInvoices();
+if (removedProformas > 0) console.log(`[AFORT] Removed ${removedProformas} pro forma invoices (numbers kept for bank matching)`);
 if (env.authToken === "change-me") {
   console.warn("[AFORT] AUTH_TOKEN is not set – the admin password is the insecure default.");
 }
@@ -67,6 +74,8 @@ app.use((req, res, next) => {
 });
 
 app.use("/api", apiRoutes);
+app.use("/", receiptRoutes);
+app.use("/", shopifyRoutes);
 app.use("/", webRoutes);
 
 app.use((req: Request, res: Response) => {
@@ -93,6 +102,19 @@ app.listen(env.port, () => {
   backfillIbansFromPdfs()
     .then((n) => { if (n > 0) console.log(`[AFORT] Filled in IBAN on ${n} invoices from their PDFs`); })
     .catch((err) => console.error("[AFORT] IBAN backfill failed:", err));
+
+  if (isShopifyConfigured()) {
+    // Shopify pays out a few times a week; once a day is plenty, plus once shortly after start
+    cron.schedule("20 6 * * *", () => {
+      syncShopifyPayouts().catch((err) => console.error("[Cron] Shopify sync failed:", err));
+    });
+    setTimeout(() => {
+      syncShopifyPayouts().catch((err) => console.error("[AFORT] Initial Shopify sync failed:", err));
+    }, 20000);
+    console.log("[AFORT] Shopify payout sync scheduled daily");
+  } else {
+    console.warn("[AFORT] Shopify is not configured – payouts are not fetched.");
+  }
 
   if (!isGmailConfigured()) {
     console.warn("[AFORT] Gmail is not configured – automatic fetching is off.");

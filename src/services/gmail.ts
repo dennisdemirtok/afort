@@ -12,19 +12,28 @@ import {
   findByVendorAndNumber,
   latestPaymentAccountForVendor,
   paymentAccount,
+  PROFORMA_SKIP_VENDORS,
+  isProforma,
+  rememberProforma,
 } from "../models/invoice";
 import { listRules } from "../models/rule";
+import { createReceipt, getReceiptByMessageId } from "../models/receipt";
 import { createNotification } from "../models/notification";
-import { parseInvoicePdf, ParsedInvoice } from "./pdf-parser";
+import { parseInvoicePdf, ParsedInvoice, amountFromText } from "./pdf-parser";
 import {
   matchRule,
+  matchReceiptRule,
   resolveVendorName,
+  displayName,
   extractInvoiceNumberFromSubject,
   extractAmountFromSubject,
+  extractReferenceFromSubject,
   isReminder,
+  SenderRule,
 } from "./invoice-extract";
 
 const LABEL_AFTER_PROCESS = "Processed/Invoices";
+const LABEL_RECEIPTS = "Processed/Receipts";
 
 // Suppliers that invoice us in EUR even when the PDF only mentions PLN
 const EUR_VENDORS = ["DTFtransfer.com", "Fancywork DTF", "Feelgood SP", "Helios Advertising"];
@@ -129,18 +138,53 @@ async function listMessageIds(query: string, max: number): Promise<string[]> {
   return ids;
 }
 
-function savePdf(messageId: string, filename: string, data: Buffer, receivedAt: Date): string {
+function saveFile(baseDir: string, messageId: string, filename: string, data: Buffer | string, receivedAt: Date): string {
   // Filed by the month the mail arrived, so re-reading the mailbox is idempotent
   const monthDir = `${receivedAt.getFullYear()}-${String(receivedAt.getMonth() + 1).padStart(2, "0")}`;
-  const saveDir = path.join(env.invoicesDir, monthDir);
+  const saveDir = path.join(baseDir, monthDir);
   fs.mkdirSync(saveDir, { recursive: true });
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const pdfPath = path.join(saveDir, `${messageId}_${safeName}`);
-  fs.writeFileSync(pdfPath, data);
-  return pdfPath;
+  const filePath = path.join(saveDir, `${messageId}_${safeName}`);
+  fs.writeFileSync(filePath, data);
+  return filePath;
+}
+
+function savePdf(messageId: string, filename: string, data: Buffer, receivedAt: Date): string {
+  return saveFile(env.invoicesDir, messageId, filename, data, receivedAt);
+}
+
+/** The HTML (or plain text) body of a mail, for receipts that come without an attachment. */
+function findBody(parts: gmail_v1.Schema$MessagePart[], mimeType: string): string | null {
+  for (const part of parts) {
+    if (part.mimeType === mimeType && part.body?.data) return Buffer.from(part.body.data, "base64").toString("utf8");
+    if (part.parts) {
+      const nested = findBody(part.parts, mimeType);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>|<\/(?:p|div|tr|li|h\d)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&euro;/g, "€")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n+/g, "\n");
 }
 
 type Outcome = "created" | "updated" | "skipped";
+
+interface Labels {
+  invoices: string | null;
+  receipts: string | null;
+}
 
 function forget(messageId: string) {
   getDb().prepare("INSERT OR IGNORE INTO deleted_messages (gmail_message_id) VALUES (?)").run(messageId);
@@ -167,10 +211,86 @@ function notifyReminder(vendorName: string, invoiceNumber: string, same: Invoice
   );
 }
 
-async function processMessage(messageId: string, mode: PollMode, labelId: string | null): Promise<Outcome> {
+/**
+ * A card receipt (Distribold, Google, Meta …): the PDF if there is one, otherwise the
+ * mail body itself is kept as the document. Amount and reference are best effort and
+ * can be corrected by hand.
+ */
+async function processReceipt(
+  messageId: string,
+  full: gmail_v1.Schema$Message,
+  from: string,
+  subject: string,
+  receivedAt: Date,
+  rule: SenderRule,
+  mode: PollMode,
+  labelId: string | null
+): Promise<Outcome> {
+  if (getReceiptByMessageId(messageId)) return "skipped";
+
+  const parts = full.payload?.parts || (full.payload ? [full.payload] : []);
+  const attachment = await downloadPdfAttachment(messageId, parts);
+  const source = rule.vendor_name || displayName(from);
+
+  let filePath: string;
+  let fileKind: "pdf" | "html";
+  let amount: number | null = null;
+  let currency: string | null = null;
+  let reference = extractReferenceFromSubject(subject);
+
+  if (attachment) {
+    filePath = saveFile(env.receiptsDir, messageId, attachment.filename, attachment.data, receivedAt);
+    fileKind = "pdf";
+    try {
+      const parsed = await parseInvoicePdf(attachment.data);
+      amount = parsed.amount;
+      currency = parsed.currency;
+      reference = reference || parsed.invoiceNumber;
+    } catch (err) {
+      console.error(`[Gmail] Could not read receipt PDF in ${messageId} (${subject}):`, err);
+    }
+  } else {
+    const html = findBody(parts, "text/html");
+    const text = html ? null : findBody(parts, "text/plain");
+    if (!html && !text) {
+      ignoredMessageIds.add(messageId);
+      return "skipped";
+    }
+    const document = html || `<pre style="font-family:sans-serif;white-space:pre-wrap">${(text || "").replace(/</g, "&lt;")}</pre>`;
+    filePath = saveFile(env.receiptsDir, messageId, "kvitto.html", document, receivedAt);
+    fileKind = "html";
+    const found = amountFromText(html ? htmlToText(html) : text || "");
+    amount = found.amount;
+    currency = found.currency;
+  }
+
+  const receipt = createReceipt({
+    gmail_message_id: messageId,
+    source,
+    sender: from,
+    subject,
+    received_at: receivedAt.toISOString(),
+    amount,
+    currency,
+    reference,
+    file_path: filePath,
+    file_kind: fileKind,
+  });
+  await markProcessed(messageId, labelId);
+
+  if (mode === "new") {
+    const amountText = amount != null ? `${amount.toFixed(2)} ${currency || ""}`.trim() : "";
+    createNotification("receipt", `Nytt kvitto från ${source}`, [reference, amountText].filter(Boolean).join(" · ") || subject.substring(0, 60), `/receipts/${receipt.id}`);
+  }
+  console.log(`[Gmail] Receipt: ${subject} (${source})`);
+  return "created";
+}
+
+async function processMessage(messageId: string, mode: PollMode, labels: Labels): Promise<Outcome> {
   const existing = getInvoiceByMessageId(messageId);
   if (existing && mode === "new") return "skipped";
   if (isMessageDeleted(messageId) || ignoredMessageIds.has(messageId)) return "skipped";
+  if (!existing && getReceiptByMessageId(messageId)) return "skipped";
 
   const full = await gmail.users.messages.get({ userId: "me", id: messageId, format: "full" });
   const headers = full.data.payload?.headers || [];
@@ -181,11 +301,14 @@ async function processMessage(messageId: string, mode: PollMode, labelId: string
     ? new Date(dateHeader)
     : new Date(Number(full.data.internalDate) || Date.now());
 
-  const rule = matchRule(from, subject, listRules());
+  const rule = matchRule(from, subject, listRules("invoice"));
   if (!rule) {
+    const receiptRule = matchReceiptRule(from, subject, listRules("receipt"));
+    if (receiptRule) return processReceipt(messageId, full.data, from, subject, receivedAt, receiptRule, mode, labels.receipts);
     ignoredMessageIds.add(messageId);
     return "skipped";
   }
+  const labelId = labels.invoices;
 
   const attachment = await downloadPdfAttachment(messageId, full.data.payload?.parts || []);
   if (!attachment) {
@@ -227,6 +350,15 @@ async function processMessage(messageId: string, mode: PollMode, labelId: string
     plusgiro: parsed.plusgiro,
     iban: parsed.iban,
   };
+
+  // Feelgood sends a pro forma first and the real invoice (FD …) after delivery – keep only the latter,
+  // but remember the pro forma number so that the bank payment can still be matched
+  if (PROFORMA_SKIP_VENDORS.includes(vendorName) && isProforma(subject, invoiceNumber)) {
+    rememberProforma(vendorName, invoiceNumber, amount, currency, receivedAt.toISOString());
+    forget(messageId);
+    await markProcessed(messageId, labelId);
+    return "skipped";
+  }
 
   // Re-reading a mail we already have: refresh what the parser produced, keep status and manual edits
   if (existing) {
@@ -327,17 +459,21 @@ export async function pollGmail(mode: PollMode = "new"): Promise<PollStatus & { 
   try {
     if (!isGmailConfigured()) throw new Error("Gmail är inte konfigurerat (GMAIL_CLIENT_ID / GMAIL_REFRESH_TOKEN saknas)");
 
-    const rules = listRules();
-    const senders = [...new Set(rules.map((r) => r.from_address.toLowerCase()))];
+    const invoiceSenders = [...new Set(listRules("invoice").map((r) => r.from_address.toLowerCase()))];
+    const receiptSenders = [...new Set(listRules("receipt").map((r) => r.from_address.toLowerCase()))];
     const messageIds = new Set<string>();
 
     // One search per sender – large OR queries silently drop results in the Gmail API.
     // "new" does not rely on the unread flag: a mail opened on the phone is still imported.
-    for (const sender of senders) {
+    // Receipts may arrive without an attachment (the mail itself is the receipt).
+    const searches = [
+      ...invoiceSenders.map((sender) => ({ sender, attachment: true })),
+      ...receiptSenders.map((sender) => ({ sender, attachment: false })),
+    ];
+    for (const { sender, attachment } of searches) {
       const query = [
         `from:${sender.replace(/^@/, "")}`,
-        "has:attachment",
-        "filename:pdf",
+        attachment ? "has:attachment filename:pdf" : "",
         mode === "new" ? "newer_than:30d" : "",
       ].filter(Boolean).join(" ");
       try {
@@ -349,12 +485,16 @@ export async function pollGmail(mode: PollMode = "new"): Promise<PollStatus & { 
     }
 
     status.total = messageIds.size;
-    const labelId = messageIds.size > 0 ? await getOrCreateLabel(LABEL_AFTER_PROCESS).catch(() => null) : null;
+    const labels: Labels = { invoices: null, receipts: null };
+    if (messageIds.size > 0) {
+      labels.invoices = await getOrCreateLabel(LABEL_AFTER_PROCESS).catch(() => null);
+      if (receiptSenders.length) labels.receipts = await getOrCreateLabel(LABEL_RECEIPTS).catch(() => null);
+    }
 
     for (const messageId of messageIds) {
       // One broken mail must never stop the rest from being imported
       try {
-        const outcome = await processMessage(messageId, mode, labelId);
+        const outcome = await processMessage(messageId, mode, labels);
         status[outcome]++;
       } catch (err: any) {
         status.failed++;

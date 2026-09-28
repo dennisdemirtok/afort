@@ -1,0 +1,111 @@
+<%- include('partials/head', { title: 'Shopify' }) %>
+<%- include('partials/shell-top') %>
+<%
+  var shopifyStatus = { SCHEDULED: 'Planerad', IN_TRANSIT: 'På väg', PAID: 'Utbetald', FAILED: 'Misslyckad', CANCELED: 'Avbruten' };
+  var localStatus = { new: ['Ej avstämd', 'badge-new'], received: ['Inbetald', 'badge-approved'], booked: ['Bokförd', 'badge-paid'] };
+  var lastSync = syncStatus.finishedAt ? h.date(syncStatus.finishedAt) : null;
+%>
+
+<div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <h1 class="page-title">Shopify-utbetalningar</h1>
+    <p class="page-subtitle">Det Shopify Payments betalar ut till banken, med försäljning, återbetalningar och avgifter bakom varje utbetalning.</p>
+  </div>
+  <% if (configured) { %>
+    <form method="POST" action="/shopify/sync">
+      <button type="submit" class="btn btn-secondary"><span class="icon">sync</span>Hämta från Shopify</button>
+    </form>
+  <% } %>
+</div>
+
+<%- include('partials/flash') %>
+
+<% if (!configured) { %>
+  <div class="card mb-8 p-6">
+    <h2 class="section-title"><span class="icon text-primary">link</span>Koppla butiken</h2>
+    <p class="mt-1 text-sm text-ink-muted">AFORT hämtar utbetalningarna via en egen app i Shopify-butiken. Det tar några minuter och görs en gång.</p>
+    <ol class="mt-5 space-y-3 text-sm">
+      <li class="flex gap-3"><span class="badge badge-new">1</span><span>I Shopify-admin: <span class="font-semibold">Inställningar → Appar och försäljningskanaler → Utveckla appar → Skapa en app</span>. Kalla den ”AFORT”.</span></li>
+      <li class="flex gap-3"><span class="badge badge-new">2</span><span>Under <span class="font-semibold">Konfigurera Admin API-behörigheter</span>, bocka i <span class="font-mono">read_shopify_payments_payouts</span> och <span class="font-mono">read_shopify_payments_accounts</span>. Spara.</span></li>
+      <li class="flex gap-3"><span class="badge badge-new">3</span><span><span class="font-semibold">Installera appen</span> och kopiera <span class="font-semibold">Admin API-åtkomsttoken</span> (visas bara en gång, börjar med <span class="font-mono">shpat_</span>).</span></li>
+      <li class="flex gap-3"><span class="badge badge-new">4</span><span>Lägg in två variabler i Railway och starta om: <span class="font-mono">SHOPIFY_STORE_DOMAIN</span> (t.ex. <span class="font-mono">transfercraft.myshopify.com</span>) och <span class="font-mono">SHOPIFY_ACCESS_TOKEN</span>.</span></li>
+    </ol>
+    <p class="hint">Token ger bara läsrättigheter till utbetalningar – inget annat i butiken kan ändras.</p>
+  </div>
+<% } %>
+
+<div class="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+  <div class="card p-5">
+    <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Utbetalningar</span>
+    <div class="mt-2 font-display text-2xl font-extrabold"><%= stats.count %></div>
+    <div class="mt-1 text-sm text-ink-muted"><%= lastSync ? 'Senast hämtat ' + lastSync : (configured ? 'Inte hämtat ännu' : 'Inte kopplat') %></div>
+  </div>
+  <div class="card p-5 <%= stats.unmatched ? 'border-amber-200 bg-amber-50/40' : '' %>">
+    <span class="text-xs font-semibold uppercase tracking-wider <%= stats.unmatched ? 'text-amber-700' : 'text-ink-muted' %>">Ej avstämda mot bank</span>
+    <div class="mt-2 font-display text-2xl font-extrabold <%= stats.unmatched ? 'text-amber-700' : '' %>"><%= stats.unmatched %></div>
+    <div class="mt-1 text-sm text-ink-muted">Bockas av när bankutdraget laddas upp</div>
+  </div>
+  <div class="card p-5">
+    <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Utbetalt i år</span>
+    <div class="mt-2 font-display text-2xl font-extrabold"><%= h.money(stats.netThisYear, stats.currency) %></div>
+    <div class="mt-1 text-sm text-ink-muted">Netto efter avgifter</div>
+  </div>
+  <div class="card p-5">
+    <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Avgifter i år</span>
+    <div class="mt-2 font-display text-2xl font-extrabold"><%= h.money(stats.feesThisYear, stats.currency) %></div>
+    <div class="mt-1 text-sm text-ink-muted">Shopify Payments-avgifter</div>
+  </div>
+</div>
+
+<div class="card overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="w-full border-collapse">
+      <thead class="border-b border-line bg-surface-low">
+        <tr>
+          <th class="th">Utbetald</th>
+          <th class="th">Shopify</th>
+          <th class="th text-right">Försäljning</th>
+          <th class="th text-right">Återbet.</th>
+          <th class="th text-right">Avgifter</th>
+          <th class="th text-right">Netto till bank</th>
+          <th class="th">Bank</th>
+          <th class="th">Status</th>
+          <th class="th w-28"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        <% if (payouts.length === 0) { %>
+          <tr>
+            <td colspan="9" class="px-6 py-16 text-center">
+              <span class="icon icon-xl mb-3 block text-ink-faint/60">storefront</span>
+              <p class="font-display font-bold">Inga utbetalningar hämtade ännu</p>
+              <p class="mx-auto mt-1 max-w-md text-sm text-ink-muted"><%= configured ? 'Klicka på ”Hämta från Shopify”. Därefter hämtas nya utbetalningar automatiskt varje morgon.' : 'Koppla butiken enligt stegen ovan.' %></p>
+            </td>
+          </tr>
+        <% } %>
+        <% payouts.forEach(function (p) { var fees = (p.charges_fee || 0) + (p.refunds_fee || 0) + (p.adjustments_fee || 0) + (p.reserved_fee || 0); var st = localStatus[p.status] || localStatus.new; %>
+          <tr class="hover:bg-surface-low">
+            <td class="td whitespace-nowrap font-semibold"><%= h.date(p.issued_at) %><span class="block font-mono text-xs font-normal text-ink-faint">#<%= p.id %></span></td>
+            <td class="td whitespace-nowrap text-sm <%= p.shopify_status === 'FAILED' || p.shopify_status === 'CANCELED' ? 'text-red-600' : 'text-ink-muted' %>"><%= shopifyStatus[p.shopify_status] || p.shopify_status %></td>
+            <td class="td whitespace-nowrap text-right tabular-nums"><%= h.money(p.charges_gross, null) %></td>
+            <td class="td whitespace-nowrap text-right tabular-nums text-ink-muted"><%= p.refunds_gross ? '−' + h.money(Math.abs(p.refunds_gross), null) : '–' %></td>
+            <td class="td whitespace-nowrap text-right tabular-nums text-ink-muted">−<%= h.money(fees, null) %></td>
+            <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= h.money(p.net, p.currency) %></td>
+            <td class="td whitespace-nowrap text-sm"><%= p.bank_date ? p.bank_date : '<span class="text-ink-faint">–</span>' %></td>
+            <td class="td whitespace-nowrap"><span class="badge <%= st[1] %>"><%= st[0] %></span></td>
+            <td class="td whitespace-nowrap text-right">
+              <a href="/shopify/<%= p.id %>/report" class="inline-flex rounded p-1 text-ink-faint hover:bg-surface-mid hover:text-primary" title="Ladda ner underlag (CSV)" aria-label="Ladda ner underlag"><span class="icon">download</span></a>
+              <% if (p.status === 'booked') { %>
+                <form method="POST" action="/shopify/<%= p.id %>/status" class="inline"><input type="hidden" name="status" value="<%= p.bank_date ? 'received' : 'new' %>"/><button type="submit" class="inline-flex rounded p-1 text-ink-faint hover:bg-surface-mid hover:text-primary" title="Ångra bokförd" aria-label="Ångra bokförd"><span class="icon">undo</span></button></form>
+              <% } else { %>
+                <form method="POST" action="/shopify/<%= p.id %>/status" class="inline"><input type="hidden" name="status" value="booked"/><button type="submit" class="inline-flex rounded p-1 text-ink-faint hover:bg-surface-mid hover:text-emerald-600" title="Markera bokförd" aria-label="Markera bokförd"><span class="icon">task_alt</span></button></form>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+  <p class="border-t border-line bg-surface-low px-4 py-3 text-xs text-ink-muted">Underlaget per utbetalning är en CSV med varje order, återbetalning och avgift samt en sammanställning – öppnas i Excel. ”Netto till bank” är det belopp som ska synas som inbetalning på kontoutdraget.</p>
+</div>
+<%- include('partials/shell-bottom') %>

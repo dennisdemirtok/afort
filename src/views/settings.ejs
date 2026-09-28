@@ -71,7 +71,7 @@
   <!-- Senders -->
   <section class="card p-6">
     <h2 class="section-title"><span class="icon text-primary">forward_to_inbox</span>Avsändare som hämtas in</h2>
-    <p class="mt-1 text-sm text-ink-muted">Mail från dessa adresser med en PDF bifogad blir fakturor i AFORT. Ämnesraden måste handla om en faktura (t.ex. innehålla ”Faktura” eller ”Invoice”).</p>
+    <p class="mt-1 text-sm text-ink-muted">Mail från dessa adresser med en PDF bifogad blir fakturor i AFORT. Ämnesraden måste handla om en faktura (t.ex. innehålla ”Faktura” eller ”Invoice”). Påminnelser blir notiser, och pro forma från Feelgood hoppas över – slutfakturan (FD …) hämtas när den kommer.</p>
 
     <ul class="mt-5 divide-y divide-line rounded-lg border border-line">
       <% if (rules.length === 0) { %><li class="px-4 py-6 text-center text-sm text-ink-muted">Inga avsändare ännu – lägg till den första nedan.</li><% } %>
@@ -97,6 +97,38 @@
         <button type="submit" class="btn btn-primary"><span class="icon">add</span>Lägg till</button>
       </div>
       <p class="hint">Skriv <span class="font-mono">@leverantor.se</span> för att ta med alla adresser på en domän.</p>
+    </form>
+  </section>
+
+  <!-- Receipt senders -->
+  <section class="card p-6">
+    <h2 class="section-title"><span class="icon text-primary">receipt</span>Kvitton som hämtas in</h2>
+    <p class="mt-1 text-sm text-ink-muted">Kortbetalningar (Distribold, Google, Meta …) där mailet eller den bifogade PDF:en är kvittot. De hamnar under <a href="/receipts" class="font-semibold text-primary hover:underline">Kvitton</a>, inte bland fakturorna.</p>
+
+    <ul class="mt-5 divide-y divide-line rounded-lg border border-line">
+      <% if (receiptRules.length === 0) { %><li class="px-4 py-6 text-center text-sm text-ink-muted">Inga kvittoavsändare ännu.</li><% } %>
+      <% receiptRules.forEach(function (r) { %>
+        <li class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-semibold"><%= r.vendor_name || 'Namn tas från mailet' %></p>
+            <p class="truncate font-mono text-xs text-ink-muted"><%= r.from_address %><% if (r.subject_contains) { %> <span class="font-sans">· ämnet innehåller ”<%= r.subject_contains %>”</span><% } %></p>
+          </div>
+          <form method="POST" action="/settings/rules/<%= r.id %>/remove" data-confirm="Sluta hämta kvitton från <%= r.from_address %>? Redan hämtade kvitton ligger kvar.">
+            <button type="submit" class="btn btn-ghost btn-sm text-red-600 hover:bg-red-50 hover:text-red-700"><span class="icon icon-sm">delete</span>Ta bort</button>
+          </form>
+        </li>
+      <% }); %>
+    </ul>
+
+    <form method="POST" action="/settings/rules/add" class="mt-6 border-t border-line pt-5">
+      <input type="hidden" name="kind" value="receipt"/>
+      <h3 class="mb-3 text-sm font-bold">Lägg till kvittoavsändare</h3>
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_1fr_1fr_auto]">
+        <div><label class="sr-only" for="receipt-from">Avsändarens e-post</label><input class="input" type="text" id="receipt-from" name="from" placeholder="receipts@tjanst.com" required autocomplete="off" inputmode="email"/></div>
+        <div><label class="sr-only" for="receipt-vendor">Källans namn</label><input class="input" type="text" id="receipt-vendor" name="vendor_name" placeholder="Källans namn (t.ex. Google Ads)" autocomplete="off"/></div>
+        <div><label class="sr-only" for="receipt-subject">Ämnet innehåller</label><input class="input" type="text" id="receipt-subject" name="subject_contains" placeholder="Ämnet innehåller (valfritt)" autocomplete="off"/></div>
+        <button type="submit" class="btn btn-primary"><span class="icon">add</span>Lägg till</button>
+      </div>
     </form>
   </section>
 

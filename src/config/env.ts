@@ -3,6 +3,9 @@ import path from "path";
 
 dotenv.config();
 
+const databasePath = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "invoice.db");
+const dataDir = path.dirname(databasePath);
+
 export const env = {
   port: parseInt(process.env.PORT || "3000", 10),
   nodeEnv: process.env.NODE_ENV || "development",
@@ -28,11 +31,18 @@ export const env = {
   orgNumber: process.env.ORG_NUMBER || "",
 
   // Database & Paths - use /data on Railway (volume mount), ./data locally
-  databasePath: process.env.DATABASE_PATH || path.join(process.cwd(), "data", "invoice.db"),
+  databasePath,
 
-  // Paths - derive from DATABASE_PATH parent directory
-  invoicesDir: path.join(path.dirname(process.env.DATABASE_PATH || path.join(process.cwd(), "data", "invoice.db")), "invoices"),
-  paymentFilesDir: path.join(path.dirname(process.env.DATABASE_PATH || path.join(process.cwd(), "data", "invoice.db")), "payment-files"),
+  // Paths - everything lives next to the database on the persistent volume
+  invoicesDir: path.join(dataDir, "invoices"),
+  paymentFilesDir: path.join(dataDir, "payment-files"),
+  receiptsDir: path.join(dataDir, "receipts"),
+  shopifyDir: path.join(dataDir, "shopify"),
+
+  // Shopify Admin API (custom app in the store: read_shopify_payments_payouts + read_shopify_payments_accounts)
+  shopifyStoreDomain: (process.env.SHOPIFY_STORE_DOMAIN || "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, ""),
+  shopifyAccessToken: (process.env.SHOPIFY_ACCESS_TOKEN || "").trim(),
+  shopifyApiVersion: process.env.SHOPIFY_API_VERSION || "2026-07",
 
   // Claude API (optional)
   claudeApiKey: process.env.CLAUDE_API_KEY || "",

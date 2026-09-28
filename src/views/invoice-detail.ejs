@@ -71,23 +71,7 @@
   <!-- PDF -->
   <section class="card overflow-hidden xl:col-span-3" aria-label="Fakturans PDF">
     <% if (hasPdf) { %>
-      <iframe id="pdf-frame" src="/invoices/<%= invoice.id %>/pdf?inline=1#view=FitH" title="Faktura-PDF" class="h-[70vh] min-h-[480px] w-full xl:h-[calc(100vh-17rem)]"></iframe>
-      <div id="pdf-fallback" class="hidden h-72 flex-col items-center justify-center px-6 text-center">
-        <span class="icon icon-xl mb-3 text-ink-faint/60">picture_as_pdf</span>
-        <p class="font-display font-bold">Förhandsvisning stöds inte i den här webbläsaren</p>
-        <p class="mt-1 text-sm text-ink-muted">Öppna PDF:en i en ny flik i stället.</p>
-      </div>
-      <div class="flex items-center justify-end border-t border-line bg-surface-low px-4 py-2">
-        <a href="/invoices/<%= invoice.id %>/pdf?inline=1" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"><span class="icon icon-sm">open_in_new</span>Öppna i ny flik</a>
-      </div>
-      <script>
-        if (navigator.pdfViewerEnabled === false) {
-          document.getElementById('pdf-frame').remove();
-          var fallback = document.getElementById('pdf-fallback');
-          fallback.classList.remove('hidden');
-          fallback.classList.add('flex');
-        }
-      </script>
+      <%- include('partials/pdf-viewer', { src: '/invoices/' + invoice.id + '/pdf?inline=1', downloadHref: '/invoices/' + invoice.id + '/pdf' }) %>
     <% } else { %>
       <div class="flex h-72 flex-col items-center justify-center px-6 text-center">
         <span class="icon icon-xl mb-3 text-ink-faint/60">scan_delete</span>

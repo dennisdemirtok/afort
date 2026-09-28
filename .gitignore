@@ -5,3 +5,4 @@ data/
 *.db
 src/public/css/app.css
 .claude/
+src/public/vendor/

@@ -4,11 +4,13 @@
   "description": "Invoice Processor – Gmail to Nordea pain.001",
   "main": "dist/index.js",
   "scripts": {
-    "build": "rm -rf dist && tsc && npm run build:css && cp -r src/views dist/views",
+    "build": "rm -rf dist && tsc && npm run build:css && npm run build:vendor && cp -r src/views dist/views",
     "build:css": "tailwindcss -i src/styles/app.css -o dist/public/css/app.css --minify",
+    "build:vendor": "mkdir -p dist/public/vendor/pdfjs && cp node_modules/pdfjs-dist/build/pdf.min.mjs node_modules/pdfjs-dist/build/pdf.worker.min.mjs dist/public/vendor/pdfjs/",
     "start": "node dist/index.js",
-    "dev": "npm run dev:css && tsx watch src/index.ts",
+    "dev": "npm run dev:css && npm run dev:vendor && tsx watch src/index.ts",
     "dev:css": "tailwindcss -i src/styles/app.css -o src/public/css/app.css",
+    "dev:vendor": "mkdir -p src/public/vendor/pdfjs && cp node_modules/pdfjs-dist/build/pdf.min.mjs node_modules/pdfjs-dist/build/pdf.worker.min.mjs src/public/vendor/pdfjs/",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -24,6 +26,7 @@
     "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.3",
     "pdf-parse": "^1.1.0",
+    "pdfjs-dist": "^6.3.289",
     "uuid": "^11.1.0",
     "xmlbuilder2": "^3.1.1"
   },

@@ -99,7 +99,71 @@ function initSchema() {
       deleted_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- Card receipts (Distribold, Google, Meta …) collected from Gmail for the bookkeeper
+    CREATE TABLE IF NOT EXISTS receipts (
+      id TEXT PRIMARY KEY,
+      gmail_message_id TEXT UNIQUE,
+      source TEXT,
+      sender TEXT,
+      subject TEXT,
+      received_at TEXT,
+      amount REAL,
+      currency TEXT,
+      reference TEXT,
+      file_path TEXT,
+      file_kind TEXT,
+      status TEXT DEFAULT 'new',
+      booked_at TEXT,
+      note TEXT,
+      manually_edited INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Shopify Payments payouts fetched from the Admin API, one CSV report per payout
+    CREATE TABLE IF NOT EXISTS shopify_payouts (
+      id TEXT PRIMARY KEY,
+      gid TEXT,
+      issued_at TEXT,
+      shopify_status TEXT,
+      transaction_type TEXT,
+      net REAL,
+      currency TEXT,
+      charges_gross REAL,
+      charges_fee REAL,
+      refunds_gross REAL,
+      refunds_fee REAL,
+      adjustments_gross REAL,
+      adjustments_fee REAL,
+      reserved_gross REAL,
+      reserved_fee REAL,
+      transaction_count INTEGER,
+      report_path TEXT,
+      status TEXT DEFAULT 'new',
+      bank_date TEXT,
+      synced_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Pro forma numbers we chose not to keep as invoices, so that a bank row that
+    -- quotes the pro forma can still be matched to the final invoice
+    CREATE TABLE IF NOT EXISTS proforma_refs (
+      id TEXT PRIMARY KEY,
+      vendor_name TEXT,
+      proforma_number TEXT,
+      amount REAL,
+      currency TEXT,
+      received_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS meta (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+    CREATE INDEX IF NOT EXISTS idx_receipts_status ON receipts(status);
+    CREATE INDEX IF NOT EXISTS idx_receipts_received ON receipts(received_at);
     CREATE INDEX IF NOT EXISTS idx_invoices_gmail_id ON invoices(gmail_message_id);
     CREATE INDEX IF NOT EXISTS idx_invoices_vendor ON invoices(vendor_name);
     CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
@@ -109,8 +173,36 @@ function initSchema() {
   addColumnIfMissing("users", "password_hash", "TEXT");
   addColumnIfMissing("invoices", "paid_at", "TEXT");
   addColumnIfMissing("invoices", "manually_edited", "INTEGER DEFAULT 0");
+  addColumnIfMissing("vendor_rules", "kind", "TEXT DEFAULT 'invoice'");
 
   seedVendorRules();
+  seedReceiptRules();
+}
+
+export function getMeta(key: string): string | null {
+  const row = getDb().prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | undefined;
+  return row ? row.value : null;
+}
+
+export function setMeta(key: string, value: string): void {
+  getDb().prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+}
+
+// Senders whose mail are card receipts rather than invoices to pay
+const DEFAULT_RECEIPT_RULES: { from: string; subject_contains: string | null; source: string }[] = [
+  { from: "support@distribold.com", subject_contains: "order confirmation", source: "Distribold" },
+  { from: "payments-noreply@google.com", subject_contains: null, source: "Google" },
+  { from: "advertise-noreply@support.facebook.com", subject_contains: null, source: "Meta Ads" },
+];
+
+function seedReceiptRules() {
+  const seeded = db.prepare("SELECT value FROM meta WHERE key = 'receipt_rules_seeded'").get();
+  if (seeded) return;
+  const insert = db.prepare(
+    "INSERT INTO vendor_rules (id, from_address, subject_contains, vendor_name, kind) VALUES (?, ?, ?, ?, 'receipt')"
+  );
+  for (const rule of DEFAULT_RECEIPT_RULES) insert.run(uuidv4(), rule.from, rule.subject_contains, rule.source);
+  db.prepare("INSERT INTO meta (key, value) VALUES ('receipt_rules_seeded', datetime('now'))").run();
 }
 
 // Vendor display names for the senders that shipped with the first versions

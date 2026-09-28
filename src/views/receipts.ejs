@@ -1,0 +1,206 @@
+<%- include('partials/head', { title: 'Kvitton' }) %>
+<%- include('partials/shell-top') %>
+<%
+  var isAdmin = user.role === 'admin';
+  var tabs = [
+    { key: '', label: 'Alla', count: counts.total },
+    { key: 'new', label: 'Att bokföra', count: counts.unbooked },
+    { key: 'booked', label: 'Bokförda', count: counts.total - counts.unbooked },
+  ];
+  var monthLabel = function (m) {
+    var names = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+    return names[parseInt(m.slice(5, 7), 10) - 1] + ' ' + m.slice(0, 4);
+  };
+%>
+
+<div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <h1 class="page-title">Kvitton</h1>
+    <p class="page-subtitle">Kortköp – Distribold, Google, Meta – hämtas automatiskt från Gmail tillsammans med fakturorna.</p>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    <button type="button" id="poll-button" class="btn btn-secondary" onclick="pollNow(this)">
+      <span class="icon">sync</span><span data-label>Hämta nya nu</span>
+    </button>
+    <a href="/receipts/export.csv<%= query(filters) %>" class="btn btn-secondary" title="Exporterar de kvitton som visas med nuvarande filter">
+      <span class="icon">download</span>Exportera CSV
+    </a>
+  </div>
+</div>
+
+<%- include('partials/flash') %>
+
+<% if (ruleCount === 0 && counts.total === 0) { %>
+  <div class="flash flash-info mb-6"><span class="icon">info</span><span>Inga kvittoavsändare är inlagda. <% if (isAdmin) { %><a href="/settings" class="font-semibold underline">Lägg till dem under Inställningar</a>.<% } else { %>Be administratören lägga till dem under Inställningar.<% } %></span></div>
+<% } %>
+
+<div class="card overflow-hidden">
+  <div class="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
+    <nav class="flex flex-wrap gap-1" aria-label="Status">
+      <% tabs.forEach(function (t) { var active = (filters.status || '') === t.key; %>
+        <a href="/receipts<%= query(filters, { status: t.key || undefined }) %>" class="tab <%= active ? 'tab-active' : '' %>"><%= t.label %> <span class="ml-1 text-xs opacity-70"><%= t.count %></span></a>
+      <% }); %>
+    </nav>
+    <form method="GET" action="/receipts" class="ml-auto flex flex-wrap items-center gap-2">
+      <% if (filters.status) { %><input type="hidden" name="status" value="<%= filters.status %>"/><% } %>
+      <label class="sr-only" for="month">Månad</label>
+      <select name="month" id="month" class="input py-1.5 text-sm" onchange="this.form.submit()">
+        <option value="">Alla månader</option>
+        <% months.forEach(function (m) { %><option value="<%= m %>" <%= filters.month === m ? 'selected' : '' %>><%= monthLabel(m) %></option><% }); %>
+      </select>
+      <label class="sr-only" for="source">Källa</label>
+      <select name="source" id="source" class="input py-1.5 text-sm" onchange="this.form.submit()">
+        <option value="">Alla källor</option>
+        <% sources.forEach(function (s) { %><option value="<%= s %>" <%= filters.source === s ? 'selected' : '' %>><%= s %></option><% }); %>
+      </select>
+      <input type="search" name="q" value="<%= filters.q || '' %>" placeholder="Sök referens…" aria-label="Sök kvitton" class="input w-40 py-1.5 text-sm"/>
+      <% if (filters.month || filters.source || filters.q) { %><a href="/receipts<%= query(filters, { month: undefined, source: undefined, q: undefined }) %>" class="btn btn-ghost btn-sm">Rensa</a><% } %>
+    </form>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="w-full border-collapse">
+      <thead class="border-b border-line bg-surface-low">
+        <tr>
+          <th class="th w-10"><input type="checkbox" id="select-all" onchange="toggleAll(this)" class="rounded border-slate-300 text-primary focus:ring-primary/30" aria-label="Markera alla"/></th>
+          <th class="th">Datum</th>
+          <th class="th">Källa</th>
+          <th class="th">Referens</th>
+          <th class="th text-right">Belopp</th>
+          <th class="th">Status</th>
+          <th class="th w-12"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        <% if (receipts.length === 0) { %>
+          <tr>
+            <td colspan="7" class="px-6 py-16 text-center">
+              <span class="icon icon-xl mb-3 block text-ink-faint/60">receipt</span>
+              <p class="font-display font-bold">Inga kvitton här</p>
+              <p class="mx-auto mt-1 max-w-md text-sm text-ink-muted">Nya kvitton dyker upp automatiskt när mailen kommer in. Prova att ändra filtret eller hämta nya nu.</p>
+            </td>
+          </tr>
+        <% } %>
+        <% receipts.forEach(function (r) { %>
+          <tr class="cursor-pointer hover:bg-surface-low" data-href="/receipts/<%= r.id %>">
+            <td class="td"><input type="checkbox" value="<%= r.id %>" class="rec-check rounded border-slate-300 text-primary focus:ring-primary/30" onchange="updateToolbar()" aria-label="Markera kvitto"/></td>
+            <td class="td whitespace-nowrap text-ink-muted"><%= h.date(r.received_at) %></td>
+            <td class="td font-semibold"><%= r.source || '–' %></td>
+            <td class="td">
+              <span class="font-mono text-[13px]"><%= r.reference || '–' %></span>
+              <span class="block max-w-xs truncate text-xs text-ink-muted"><%= r.subject %></span>
+            </td>
+            <td class="td whitespace-nowrap text-right font-semibold tabular-nums">
+              <% if (r.amount != null) { %><%= h.money(r.amount, r.currency) %><% } else { %><span class="badge badge-approved"><span class="icon icon-sm">edit</span>Saknar belopp</span><% } %>
+            </td>
+            <td class="td whitespace-nowrap">
+              <span class="badge <%= r.status === 'booked' ? 'badge-paid' : 'badge-new' %>"><%= r.status === 'booked' ? 'Bokförd' : 'Ny' %></span>
+              <% if (r.status === 'booked' && r.booked_at) { %><span class="ml-1 text-xs text-ink-faint"><%= r.booked_at %></span><% } %>
+            </td>
+            <td class="td text-center">
+              <% if (r.file_path) { %>
+                <a href="/receipts/<%= r.id %>/file?download=1" class="inline-flex rounded p-1 text-ink-faint hover:bg-surface-mid hover:text-primary" title="Ladda ner" aria-label="Ladda ner kvitto"><span class="icon"><%= r.file_kind === 'html' ? 'mail' : 'picture_as_pdf' %></span></a>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+  <div class="border-t border-line bg-surface-low px-4 py-3 text-xs text-ink-muted"><%= receipts.length %> kvitton visas</div>
+</div>
+
+<div id="bulk-toolbar" class="pointer-events-none fixed inset-x-0 bottom-6 z-40 hidden justify-center px-4 lg:pl-64">
+  <div class="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-xl bg-ink px-4 py-3 text-white shadow-pop">
+    <span class="mr-2 text-sm font-semibold"><span id="selected-count">0</span> markerade</span>
+    <button type="button" onclick="bulkAction('booked')" class="btn btn-sm bg-white/10 text-white hover:bg-white/20"><span class="icon icon-sm">task_alt</span>Markera bokförda</button>
+    <button type="button" onclick="bulkAction('new')" class="btn btn-sm bg-white/10 text-white hover:bg-white/20"><span class="icon icon-sm">undo</span>Återställ</button>
+    <button type="button" onclick="downloadZip()" class="btn btn-sm bg-white/10 text-white hover:bg-white/20"><span class="icon icon-sm">folder_zip</span>Ladda ner filer</button>
+    <% if (isAdmin) { %>
+      <button type="button" onclick="bulkAction('delete')" class="btn btn-sm bg-red-500/90 text-white hover:bg-red-500"><span class="icon icon-sm">delete</span>Radera</button>
+    <% } %>
+    <button type="button" onclick="clearSelection()" class="btn btn-sm text-white/70 hover:text-white" aria-label="Avmarkera alla"><span class="icon icon-sm">close</span></button>
+  </div>
+</div>
+
+<form id="zip-form" method="POST" action="/receipts/download-zip" class="hidden"></form>
+
+<script>
+  document.querySelectorAll('tr[data-href]').forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('a, button, input, label')) return;
+      window.location.href = row.dataset.href;
+    });
+  });
+  function getSelectedIds() {
+    return Array.from(document.querySelectorAll('.rec-check:checked')).map(function (cb) { return cb.value; });
+  }
+  function updateToolbar() {
+    var ids = getSelectedIds();
+    var all = document.querySelectorAll('.rec-check');
+    var toolbar = document.getElementById('bulk-toolbar');
+    toolbar.classList.toggle('hidden', ids.length === 0);
+    toolbar.classList.toggle('flex', ids.length > 0);
+    document.getElementById('selected-count').textContent = ids.length;
+    var master = document.getElementById('select-all');
+    master.checked = ids.length > 0 && ids.length === all.length;
+    master.indeterminate = ids.length > 0 && ids.length < all.length;
+  }
+  function toggleAll(master) {
+    document.querySelectorAll('.rec-check').forEach(function (cb) { cb.checked = master.checked; });
+    updateToolbar();
+  }
+  function clearSelection() {
+    document.querySelectorAll('.rec-check').forEach(function (cb) { cb.checked = false; });
+    updateToolbar();
+  }
+  function bulkAction(action) {
+    var ids = getSelectedIds();
+    if (!ids.length) return;
+    var n = ids.length + ' kvitto' + (ids.length === 1 ? '' : 'n');
+    var question = {
+      delete: 'Radera ' + n + '? De hämtas inte in igen från Gmail.',
+      booked: 'Markera ' + n + ' som bokförda?',
+      new: 'Återställa ' + n + ' till nya?'
+    }[action];
+    if (!confirm(question)) return;
+    fetch('/receipts/bulk', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids, action: action })
+    }).then(function (res) {
+      if (res.ok) return window.location.reload();
+      return res.json().then(function (body) { alert(body.error || 'Något gick fel. Försök igen.'); });
+    }).catch(function () { alert('Kunde inte nå servern. Försök igen.'); });
+  }
+  function downloadZip() {
+    var form = document.getElementById('zip-form');
+    form.innerHTML = '';
+    getSelectedIds().forEach(function (id) {
+      var input = document.createElement('input');
+      input.type = 'hidden'; input.name = 'ids'; input.value = id;
+      form.appendChild(input);
+    });
+    form.submit();
+  }
+  function pollNow(button) {
+    var label = button.querySelector('[data-label]');
+    button.disabled = true;
+    button.querySelector('.icon').classList.add('animate-spin');
+    label.textContent = 'Hämtar…';
+    fetch('/api/trigger-poll', { method: 'POST', credentials: 'same-origin' })
+      .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.body.error || 'Hämtningen misslyckades');
+        window.location.href = '/receipts?ok=' + encodeURIComponent('Gmail är kontrollerat.');
+      })
+      .catch(function (err) {
+        button.disabled = false;
+        button.querySelector('.icon').classList.remove('animate-spin');
+        label.textContent = 'Hämta nya nu';
+        alert(err.message);
+      });
+  }
+</script>
+<%- include('partials/shell-bottom') %>

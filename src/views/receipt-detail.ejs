@@ -1,0 +1,85 @@
+<%- include('partials/head', { title: (receipt.source || 'Kvitto') + (receipt.reference ? ' ' + receipt.reference : '') }) %>
+<%- include('partials/shell-top') %>
+
+<a href="/receipts" class="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-ink-muted hover:text-primary"><span class="icon icon-sm">arrow_back</span>Alla kvitton</a>
+
+<div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <h1 class="page-title flex flex-wrap items-center gap-3"><%= receipt.source || 'Kvitto' %>
+      <span class="badge <%= receipt.status === 'booked' ? 'badge-paid' : 'badge-new' %>"><%= receipt.status === 'booked' ? 'Bokförd' : 'Ny' %></span>
+    </h1>
+    <p class="page-subtitle"><%= receipt.reference ? receipt.reference + ' · ' : '' %><%= h.date(receipt.received_at) %><% if (receipt.amount != null) { %> · <span class="font-semibold text-ink"><%= h.money(receipt.amount, receipt.currency) %></span><% } %></p>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    <% if (receipt.status === 'booked') { %>
+      <form method="POST" action="/receipts/<%= receipt.id %>/status"><input type="hidden" name="status" value="new"/><button type="submit" class="btn btn-secondary"><span class="icon">undo</span>Ångra bokförd</button></form>
+    <% } else { %>
+      <form method="POST" action="/receipts/<%= receipt.id %>/status"><input type="hidden" name="status" value="booked"/><button type="submit" class="btn btn-success"><span class="icon">task_alt</span>Markera bokförd</button></form>
+    <% } %>
+    <% if (isAdmin) { %>
+      <form method="POST" action="/receipts/<%= receipt.id %>/delete" data-confirm="Radera kvittot? Det hämtas inte in igen från Gmail.">
+        <button type="submit" class="btn btn-danger"><span class="icon">delete</span>Radera</button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<%- include('partials/flash') %>
+
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-5">
+  <section class="card overflow-hidden xl:col-span-3" aria-label="Kvittot">
+    <% if (!hasFile) { %>
+      <div class="flex h-72 flex-col items-center justify-center px-6 text-center">
+        <span class="icon icon-xl mb-3 text-ink-faint/60">scan_delete</span>
+        <p class="font-display font-bold">Ingen fil sparad</p>
+      </div>
+    <% } else if (receipt.file_kind === 'html') { %>
+      <iframe src="/receipts/<%= receipt.id %>/file" title="Kvittomail" sandbox="" referrerpolicy="no-referrer" class="h-[70vh] min-h-[480px] w-full bg-white xl:h-[calc(100vh-17rem)]"></iframe>
+      <div class="flex items-center justify-end gap-1 border-t border-line bg-surface-low px-4 py-2">
+        <a href="/receipts/<%= receipt.id %>/file" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"><span class="icon icon-sm">open_in_new</span>Öppna i ny flik</a>
+        <a href="/receipts/<%= receipt.id %>/file?download=1" class="btn btn-ghost btn-sm"><span class="icon icon-sm">download</span>Ladda ner</a>
+      </div>
+    <% } else { %>
+      <%- include('partials/pdf-viewer', { src: '/receipts/' + receipt.id + '/file', downloadHref: '/receipts/' + receipt.id + '/file?download=1' }) %>
+    <% } %>
+  </section>
+
+  <div class="space-y-6 xl:col-span-2">
+    <section class="card p-6">
+      <h2 class="section-title mb-5"><span class="icon text-primary">edit_note</span>Kvittouppgifter</h2>
+      <form method="POST" action="/receipts/<%= receipt.id %>" class="space-y-4">
+        <div>
+          <label class="label" for="source">Källa</label>
+          <input class="input" type="text" id="source" name="source" value="<%= receipt.source || '' %>"/>
+        </div>
+        <div>
+          <label class="label" for="reference">Referens (order- eller fakturanummer)</label>
+          <input class="input font-mono" type="text" id="reference" name="reference" value="<%= receipt.reference || '' %>"/>
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+          <div class="col-span-2">
+            <label class="label" for="amount">Belopp</label>
+            <input class="input tabular-nums" type="text" inputmode="decimal" id="amount" name="amount" value="<%= receipt.amount != null ? String(receipt.amount.toFixed(2)).replace('.', ',') : '' %>" placeholder="0,00"/>
+          </div>
+          <div>
+            <label class="label" for="currency">Valuta</label>
+            <input class="input uppercase" type="text" id="currency" name="currency" value="<%= receipt.currency || '' %>" placeholder="SEK" maxlength="3"/>
+          </div>
+        </div>
+        <div>
+          <label class="label" for="note">Anteckning till bokföringen</label>
+          <textarea class="input" id="note" name="note" rows="3" placeholder="T.ex. vilket konto det betalades med"><%= receipt.note || '' %></textarea>
+        </div>
+        <div class="flex items-center justify-between pt-2">
+          <p class="text-xs text-ink-muted">Betalt med kort · mail från <%= receipt.sender %></p>
+          <button type="submit" class="btn btn-primary"><span class="icon">save</span>Spara</button>
+        </div>
+      </form>
+    </section>
+    <section class="card p-6 text-sm text-ink-muted">
+      <p class="font-semibold text-ink"><%= receipt.subject %></p>
+      <p class="mt-1">Mottaget <%= h.date(receipt.received_at) %><% if (receipt.booked_at) { %> · bokfört <%= receipt.booked_at %><% } %></p>
+    </section>
+  </div>
+</div>
+<%- include('partials/shell-bottom') %>

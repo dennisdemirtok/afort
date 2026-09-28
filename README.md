@@ -19,7 +19,18 @@ betalfiler (ISO 20022 pain.001) för Nordea.
 - **Raderade fakturor** kommer aldrig tillbaka, inte heller vid *Läs om alla fakturor*.
 - **Läs om alla fakturor** (Inställningar → Underhåll) tolkar om alla mail i bakgrunden men rör inte
   status, betalmarkeringar eller fakturor som ändrats för hand.
-- **Bankutdrag**: ladda upp Nordeas CSV, granska träffarna och bocka av betalda fakturor.
+- **Pro forma** från Feelgood hämtas inte (slutfakturan FD … kommer efter leverans). Numret sparas så att
+  en bankbetalning som anger pro forma-numret ändå matchas mot slutfakturan.
+- **Kvitton** (fliken *Kvitton*): kortköp från Distribold, Google och Meta hämtas från samma Gmail.
+  Finns en PDF sparas den, annars sparas själva mailet. Belopp och referens tolkas så gott det går och
+  kan rättas för hand; bokföraren markerar kvittot som bokfört. Avsändare styrs under *Inställningar →
+  Kvitton som hämtas in*.
+- **Shopify** (fliken *Shopify*): utbetalningar från Shopify Payments hämtas via Admin API (en egen app i
+  butiken med `read_shopify_payments_payouts` + `read_shopify_payments_accounts`; sätt
+  `SHOPIFY_STORE_DOMAIN` och `SHOPIFY_ACCESS_TOKEN`). Varje utbetalning får en CSV med alla ordrar,
+  återbetalningar och avgifter plus en sammanställning. Hämtas varje morgon och på knapptryck.
+- **Bankutdrag**: ladda upp Nordeas CSV, granska träffarna och bocka av betalda fakturor. Inbetalningar
+  som stämmer med en Shopify-utbetalning (belopp, några dagar efter) bockas av på samma sätt.
 
 ## Roller
 
@@ -50,8 +61,9 @@ begränsas automatiskt till de ikoner som används i vyerna.
 
 - Bygg: `npm install && npm run build`, start: `node dist/index.js` (en enda tjänst – Gmail-hämtningen
   körs i samma process).
-- Persistent volym monterad på `/data`; sätt `DATABASE_PATH=/data/invoice.db`. Databas, PDF:er och
-  betalfiler ligger där.
+- Persistent volym monterad på `/data`; sätt `DATABASE_PATH=/data/invoice.db`. Databas, PDF:er,
+  kvitton, Shopify-underlag och betalfiler ligger där.
+- PDF:er visas med PDF.js (kopieras från `pdfjs-dist` till `public/vendor/pdfjs` vid bygge).
 - Miljövariabler: se `.env.example`. `DEBTOR_IBAN` och `ORG_NUMBER` krävs för giltiga betalfiler.
 - Gmail kopplas under *Inställningar → Gmail-koppling*; spara den refresh token som visas som
   `GMAIL_REFRESH_TOKEN`.

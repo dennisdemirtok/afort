@@ -14,6 +14,10 @@ import { listPaymentFiles, getPaymentFileById } from "../models/payment-file";
 import { getUnreadNotifications, getUnreadCount, markAllRead, markRead } from "../models/notification";
 import { generatePain001, validateForPayment } from "../services/pain001";
 import { pollGmail, getPollStatus } from "../services/gmail";
+import { listReceipts } from "../models/receipt";
+import { listPayouts } from "../models/shopify";
+import { syncShopifyPayouts, getShopifySyncStatus } from "../services/shopify";
+import { receiptFiltersFromQuery } from "./receipts";
 import { requireAdmin } from "../middleware/auth";
 import { filtersFromQuery, invoicesToCsv } from "./shared";
 
@@ -128,6 +132,23 @@ router.get("/reprocess", (_req: Request, res: Response) => {
 });
 
 // ---- Notifications ----
+
+// ---- Receipts & Shopify ----
+
+router.get("/receipts", (req: Request, res: Response) => {
+  res.json(listReceipts(receiptFiltersFromQuery(req.query as Record<string, unknown>), 5000));
+});
+
+router.get("/shopify/payouts", (_req: Request, res: Response) => {
+  res.json({ status: getShopifySyncStatus(), payouts: listPayouts() });
+});
+
+router.post("/shopify/sync", async (_req: Request, res: Response) => {
+  const result = await syncShopifyPayouts();
+  if (result.busy) return res.status(409).json({ error: "En hämtning pågår redan", status: result });
+  if (result.error) return res.status(502).json({ error: result.error, status: result });
+  res.json({ success: true, created: result.created, payouts: result.payouts, status: result });
+});
 
 router.get("/notifications", (_req: Request, res: Response) => {
   res.json({ unread: getUnreadCount(), notifications: getUnreadNotifications() });

@@ -3,7 +3,7 @@
 
 <div class="mb-8">
   <h1 class="page-title">Bankutdrag</h1>
-  <p class="page-subtitle">Ladda upp kontoutdraget från Nordea som CSV, så bockas betalda fakturor av automatiskt med hjälp av fakturanumret i betalningens meddelande.</p>
+  <p class="page-subtitle">Ladda upp kontoutdraget från Nordea som CSV, så bockas betalda fakturor av med hjälp av fakturanumret i betalningens meddelande – och Shopify-utbetalningar med hjälp av beloppet.</p>
 </div>
 
 <form method="POST" action="/bank-upload" enctype="multipart/form-data" class="card mb-8 p-6">
@@ -22,11 +22,54 @@
     <%= result.payments %> utgående betalningar ·
     <%= result.toMark.length %> att bocka av ·
     <%= result.alreadyPaid.length %> redan betalda ·
-    <%= result.unmatched.length %> utan matchning
+    <%= result.unmatched.length %> utan matchning<% if (result.payouts.length) { %> ·
+    <%= result.payouts.length %> Shopify-utbetalningar<% } %>
   </p>
 
+  <form method="POST" action="/bank-upload/apply" id="apply-form">
+  <% if (result.payouts.length) { %>
+    <div class="card mb-8 overflow-hidden">
+      <div class="flex items-center gap-2 border-b border-line px-6 py-4">
+        <span class="icon text-emerald-600">storefront</span>
+        <h2 class="section-title">Shopify-utbetalningar på kontoutdraget</h2>
+        <span class="badge badge-neutral"><%= result.payouts.length %></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse">
+          <thead class="border-b border-line bg-surface-low">
+            <tr>
+              <th class="th w-10"></th>
+              <th class="th">Utbetalning</th>
+              <th class="th text-right">Netto enligt Shopify</th>
+              <th class="th text-right">Inbetalt</th>
+              <th class="th">Bankdatum</th>
+              <th class="th">Avsändare på inbetalningen</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-line">
+            <% result.payouts.forEach(function (m) { %>
+              <tr class="hover:bg-surface-low">
+                <td class="td"><input type="checkbox" name="payouts" value="<%= m.payout.id %>|<%= m.row.date %>" <%= m.exact ? 'checked' : '' %> class="match-check rounded border-slate-300 text-primary focus:ring-primary/30" aria-label="Bocka av utbetalning <%= m.payout.id %>"/></td>
+                <td class="td"><a href="/shopify" class="font-semibold hover:text-primary">Shopify <%= h.date(m.payout.issued_at) %></a><span class="block font-mono text-xs text-ink-muted">#<%= m.payout.id %></span><% if (!m.exact) { %><span class="badge badge-approved mt-1"><span class="icon icon-sm">warning</span>Matchad bara på belopp</span><% } %></td>
+                <td class="td whitespace-nowrap text-right tabular-nums"><%= h.money(m.payout.net, m.payout.currency) %></td>
+                <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= h.money(m.row.amount, m.row.currency) %></td>
+                <td class="td whitespace-nowrap"><%= m.row.date %></td>
+                <td class="td text-xs text-ink-muted"><%= m.row.name %><span class="block font-mono"><%= m.row.message %></span></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <% if (!result.toMark.length) { %>
+        <div class="flex justify-end border-t border-line bg-surface-low px-6 py-4">
+          <button type="submit" class="btn btn-success"><span class="icon">task_alt</span>Bocka av valda</button>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+
   <% if (result.toMark.length) { %>
-    <form method="POST" action="/bank-upload/apply" class="card mb-8 overflow-hidden">
+    <div class="card mb-8 overflow-hidden">
       <div class="flex items-center gap-2 border-b border-line px-6 py-4">
         <span class="icon text-emerald-600">check_circle</span>
         <h2 class="section-title">Matchade betalningar</h2>
@@ -66,20 +109,21 @@
         <p class="text-sm text-ink-muted">Betalningar i SEK för fakturor i EUR jämförs inte på belopp – kontrollera dem vid behov.</p>
         <button type="submit" class="btn btn-success"><span class="icon">paid</span>Markera valda som betalda</button>
       </div>
-    </form>
+    </div>
     <script>
       document.getElementById('match-all').addEventListener('change', function () {
         var checked = this.checked;
         document.querySelectorAll('.match-check').forEach(function (c) { c.checked = checked; });
       });
     </script>
-  <% } else { %>
+  <% } else if (!result.payouts.length) { %>
     <div class="card mb-8 px-6 py-10 text-center">
       <span class="icon icon-xl mb-3 block text-emerald-600/70">verified</span>
       <p class="font-display font-bold">Inget nytt att bocka av</p>
       <p class="mt-1 text-sm text-ink-muted">Alla betalningar i filen som hör till en faktura är redan markerade som betalda.</p>
     </div>
   <% } %>
+  </form>
 
   <% if (result.alreadyPaid.length) { %>
     <details class="card mb-8 overflow-hidden">

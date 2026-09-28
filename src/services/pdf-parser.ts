@@ -29,6 +29,11 @@ export async function parseInvoicePdf(pdfBuffer: Buffer): Promise<ParsedInvoice>
   };
 }
 
+/** Amount and currency out of any text – used for receipts that arrive as HTML mail. */
+export function amountFromText(text: string): { amount: number | null; currency: string | null } {
+  return { amount: extractAmount(text), currency: extractCurrency(text) };
+}
+
 function extractAmount(text: string): number | null {
   // BWS: "Amount\n3.070,96 SEK0,00 SEK0,00 SEK3.070,96 SEK" — last number on the line after "Amount"
   // The line after "Amount" has 4 SEK amounts concatenated, last one is the total
@@ -44,8 +49,10 @@ function extractAmount(text: string): number | null {
     /(?:DO ZAPŁATY|POZOSTAŁO DO ZAPŁATY)\s*:?\s*€?\s*([\d\s]+[.,]\d{2})/i,
     // Polish: "Brutto (EUR)\n52,48" — total at bottom
     /Brutto\s*\(EUR\)\s*\n?\s*([\d\s]+[.,]\d{2})/i,
-    // English: "Total Amount: 1,234.56 EUR/DKK"
-    /(?:total\s*amount|amount\s*due|total)\s*:?\s*(?:EUR|DKK|SEK|USD)?\s*([\d\s,.]+\d{2})/i,
+    // Receipts: "Amount paid: €123.45", "Betalt belopp: 123,45 kr", "Total charged $12.00"
+    /(?:amount\s*paid|amount\s*charged|total\s*charged|paid\s*amount|betalt\s*belopp|debiterat\s*belopp|totalt\s*belopp|grand\s*total)\s*:?\s*(?:EUR|DKK|SEK|USD|GBP|€|\$|£)?\s*([\d\s,.]+\d{2})/i,
+    // English: "Total Amount: 1,234.56 EUR/DKK", "Total: €52.48"
+    /(?:total\s*amount|amount\s*due|total)\s*:?\s*(?:EUR|DKK|SEK|USD|GBP|€|\$|£)?\s*([\d\s,.]+\d{2})/i,
     // Swedish: "Att betala: 12 345,67" or "Summa: 1 234,00 SEK"
     /(?:att\s+betala|total(?:t|belopp)?|summa|belopp)\s*:?\s*([\d\s]+[.,]\d{2})/i,
     // Generic: amount followed by currency at end of line
@@ -169,5 +176,10 @@ function extractCurrency(text: string): string | null {
   if (/\bUSD\b/.test(text)) return "USD";
   if (/\bSEK\b/.test(text)) return "SEK";
   if (/\bPLN\b/.test(text)) return "PLN";
+  if (/\bGBP\b/.test(text)) return "GBP";
+  if (/€/.test(text)) return "EUR";
+  if (/\d\s*kr\b/i.test(text)) return "SEK";
+  if (/\$/.test(text)) return "USD";
+  if (/£/.test(text)) return "GBP";
   return null;
 }

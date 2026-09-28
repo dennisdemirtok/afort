@@ -16,9 +16,11 @@ import {
   findRedundantDuplicateIds,
   findByVendorAndNumber,
   normalizeInvoiceNumber,
+  findProformaRef,
   STATUSES,
   Invoice,
 } from "../models/invoice";
+import { listUnmatchedPayouts, markPayoutReceived, ShopifyPayout } from "../models/shopify";
 import { listPaymentFiles, getPaymentFileById } from "../models/payment-file";
 import {
   createUserWithPassword,
@@ -307,7 +309,8 @@ router.post("/account/password", (req: Request, res: Response) => {
 router.get("/settings", requireAdmin, (req: Request, res: Response) => {
   res.render("settings", {
     users: listUsers(),
-    rules: listRules(),
+    rules: listRules("invoice"),
+    receiptRules: listRules("receipt"),
     duplicateCount: findRedundantDuplicateIds().length,
     pollStatus: getPollStatus(),
     gmailConfigured: isGmailConfigured(),
@@ -348,9 +351,10 @@ router.post("/settings/rules/add", requireAdmin, (req: Request, res: Response) =
   if (!/^[^\s@]*@[^\s@]+\.[^\s@]+$/.test(from)) {
     return res.redirect(flash("/settings", "err", "Ange en e-postadress (namn@foretag.se) eller en hel domän (@foretag.se)."));
   }
-  if (ruleExists(from)) return res.redirect(flash("/settings", "err", `${from} finns redan som avsändare.`));
-  createRule(from, req.body.subject_contains, req.body.vendor_name);
-  res.redirect(flash("/settings", "ok", `${from} tillagd. Fakturor från de senaste 30 dagarna hämtas vid nästa kontroll.`));
+  const kind = req.body.kind === "receipt" ? "receipt" : "invoice";
+  if (ruleExists(from, kind)) return res.redirect(flash("/settings", "err", `${from} finns redan som avsändare.`));
+  createRule(from, req.body.subject_contains, req.body.vendor_name, kind);
+  res.redirect(flash("/settings", "ok", `${from} tillagd. ${kind === "receipt" ? "Kvitton" : "Fakturor"} från de senaste 30 dagarna hämtas vid nästa kontroll.`));
 });
 
 router.post("/settings/rules/:id/remove", requireAdmin, (req: Request, res: Response) => {
@@ -374,7 +378,7 @@ function decodeCsv(buffer: Buffer): string {
   return text.replace(/^﻿/, "");
 }
 
-function parseBankCsv(csvText: string): BankRow[] {
+export function parseBankCsv(csvText: string): BankRow[] {
   const lines = csvText.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) return [];
   const headers = lines[0].split(";").map((h) => h.trim().toLowerCase());
@@ -414,7 +418,7 @@ interface BankMatch {
   alreadyPaid: boolean;
 }
 
-function matchBankRows(rows: BankRow[]): { matches: BankMatch[]; unmatched: BankRow[] } {
+export function matchBankRows(rows: BankRow[]): { matches: BankMatch[]; unmatched: BankRow[] } {
   const invoices = (getDb().prepare("SELECT * FROM invoices WHERE invoice_number IS NOT NULL").all() as Invoice[]);
   const byNumber = new Map<string, Invoice[]>();
   for (const inv of invoices) {
@@ -467,6 +471,20 @@ function matchBankRows(rows: BankRow[]): { matches: BankMatch[]; unmatched: Bank
       if (key) invoice = pick(byNumber.get(key)!, row);
     }
 
+    // The payment quotes a pro forma (Feelgood "PROF 790/2026"): the final invoice has
+    // another number but the same vendor and amount
+    let viaProforma = false;
+    if (!invoice && cleaned) {
+      const ref = findProformaRef(cleaned);
+      if (ref && ref.amount != null) {
+        const candidates = invoices.filter(
+          (c) => !taken.has(c.id) && c.vendor_name === ref.vendor_name && c.amount != null && Math.abs(c.amount - ref.amount!) < 0.005
+        );
+        invoice = candidates.find((c) => c.status !== "paid") || candidates[0];
+        viaProforma = !!invoice;
+      }
+    }
+
     if (!invoice) {
       unmatched.push(row);
       continue;
@@ -475,17 +493,49 @@ function matchBankRows(rows: BankRow[]): { matches: BankMatch[]; unmatched: Bank
     taken.add(invoice.id);
     const paid = Math.abs(row.amount);
     const warnings: string[] = [];
+    if (viaProforma) warnings.push(`Betalningen anger pro forma – matchad mot slutfakturan ${invoice.invoice_number}`);
     const nameOk = !row.name || namesOverlap(row.name, invoice.vendor_name);
     if (!nameOk) warnings.push(`Mottagaren "${row.name}" liknar inte leverantören`);
     if (invoice.amount != null && invoice.currency === row.currency && Math.abs(invoice.amount - paid) > 1) {
       warnings.push("Beloppet skiljer sig från fakturan");
     }
-    if (!exact) warnings.push("Fakturanumret matchar bara delvis");
+    if (!exact && !viaProforma) warnings.push("Fakturanumret matchar bara delvis");
 
-    matches.push({ row, invoice, exact, warnings, risky: !exact || !nameOk, alreadyPaid: invoice.status === "paid" });
+    matches.push({ row, invoice, exact: exact || viaProforma, warnings, risky: (!exact && !viaProforma) || !nameOk, alreadyPaid: invoice.status === "paid" });
   }
 
   return { matches, unmatched };
+}
+
+interface PayoutMatch {
+  row: BankRow;
+  payout: ShopifyPayout;
+  exact: boolean;
+}
+
+/** Incoming rows that look like Shopify payouts: same amount, a few days after the payout was issued. */
+export function matchPayoutRows(rows: BankRow[]): PayoutMatch[] {
+  const payouts = listUnmatchedPayouts();
+  if (payouts.length === 0) return [];
+  const taken = new Set<string>();
+  const matches: PayoutMatch[] = [];
+  const dayDiff = (a: string, b: string) => Math.round((new Date(a).getTime() - new Date(b).getTime()) / 86400000);
+  for (const row of rows) {
+    if (row.amount <= 0) continue;
+    const mentionsShopify = /shopify/i.test(`${row.name} ${row.message}`);
+    const candidates = payouts.filter((p) => {
+      if (taken.has(p.id) || p.net == null || !p.issued_at) return false;
+      if (Math.abs(p.net - row.amount) > 0.005) return false;
+      if (p.currency && row.currency && p.currency !== row.currency) return false;
+      const diff = dayDiff(row.date, p.issued_at.slice(0, 10));
+      return diff >= -1 && diff <= 10;
+    });
+    const payout = candidates.find((p) => mentionsShopify) || (mentionsShopify ? candidates[0] : candidates.length === 1 ? candidates[0] : undefined);
+    if (!payout) continue;
+    taken.add(payout.id);
+    matches.push({ row, payout, exact: mentionsShopify });
+  }
+  return matches;
 }
 
 router.get("/bank-upload", (req: Request, res: Response) => {
@@ -507,6 +557,7 @@ router.post("/bank-upload", upload.single("csvfile"), (req: Request, res: Respon
       toMark: matches.filter((m) => !m.alreadyPaid),
       alreadyPaid: matches.filter((m) => m.alreadyPaid),
       unmatched,
+      payouts: matchPayoutRows(rows),
     },
     err: null,
   });
@@ -519,8 +570,16 @@ router.post("/bank-upload/apply", (req: Request, res: Response) => {
     const paidAt = /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : undefined;
     if (updateInvoice(id, { status: "paid", paid_at: paidAt })) count++;
   }
-  if (count === 0) return res.redirect(flash("/bank-upload", "err", "Inga betalningar var markerade."));
-  res.redirect(flash("/invoices?status=paid", "ok", `${count} fakturor markerade som betalda.`));
+  let payoutCount = 0;
+  for (const value of asArray(req.body.payouts)) {
+    const [id, date] = value.split("|");
+    if (markPayoutReceived(id, /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : undefined)) payoutCount++;
+  }
+  if (count === 0 && payoutCount === 0) return res.redirect(flash("/bank-upload", "err", "Inga betalningar var markerade."));
+  const parts = [];
+  if (count) parts.push(`${count} fakturor markerade som betalda`);
+  if (payoutCount) parts.push(`${payoutCount} Shopify-utbetalningar bockade av`);
+  res.redirect(flash(count ? "/invoices?status=paid" : "/shopify", "ok", parts.join(", ") + "."));
 });
 
 export default router;

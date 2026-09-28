@@ -1,0 +1,54 @@
+<%# PDF rendered with PDF.js so that it works in every browser (Safari and mobile included). Params: src, downloadHref %>
+<div class="pdf-viewer" data-pdf-src="<%= src %>">
+  <div class="max-h-[70vh] min-h-[480px] overflow-auto bg-surface-low p-3 xl:max-h-[calc(100vh-17rem)]" data-pdf-pages>
+    <p class="py-16 text-center text-sm text-ink-muted" data-pdf-loading><span class="icon mb-2 block animate-spin text-ink-faint">progress_activity</span>Laddar PDF…</p>
+  </div>
+  <div class="hidden h-72 flex-col items-center justify-center px-6 text-center" data-pdf-fallback>
+    <span class="icon icon-xl mb-3 text-ink-faint/60">picture_as_pdf</span>
+    <p class="font-display font-bold">PDF:en kunde inte visas här</p>
+    <p class="mt-1 text-sm text-ink-muted">Öppna den i en ny flik eller ladda ner den i stället.</p>
+  </div>
+  <div class="flex items-center justify-end gap-1 border-t border-line bg-surface-low px-4 py-2">
+    <a href="<%= src %>" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"><span class="icon icon-sm">open_in_new</span>Öppna i ny flik</a>
+    <a href="<%= downloadHref %>" class="btn btn-ghost btn-sm"><span class="icon icon-sm">download</span>Ladda ner</a>
+  </div>
+</div>
+<script type="module">
+  import * as pdfjsLib from '/vendor/pdfjs/pdf.min.mjs';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.mjs';
+
+  async function renderViewer(viewer) {
+    var pages = viewer.querySelector('[data-pdf-pages]');
+    var fallback = viewer.querySelector('[data-pdf-fallback]');
+    try {
+      var pdf = await pdfjsLib.getDocument({ url: viewer.dataset.pdfSrc }).promise;
+      pages.innerHTML = '';
+      var width = Math.max(pages.clientWidth - 24, 280);
+      var ratio = window.devicePixelRatio || 1;
+      for (var n = 1; n <= pdf.numPages; n++) {
+        var page = await pdf.getPage(n);
+        var base = page.getViewport({ scale: 1 });
+        var viewport = page.getViewport({ scale: Math.min(width / base.width, 2.5) });
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.floor(viewport.width * ratio);
+        canvas.height = Math.floor(viewport.height * ratio);
+        canvas.style.width = Math.floor(viewport.width) + 'px';
+        canvas.style.height = Math.floor(viewport.height) + 'px';
+        canvas.className = 'mx-auto mb-3 block max-w-full rounded border border-line bg-white shadow-sm';
+        canvas.setAttribute('aria-label', 'Sida ' + n + ' av ' + pdf.numPages);
+        pages.appendChild(canvas);
+        await page.render({
+          canvasContext: canvas.getContext('2d'),
+          viewport: viewport,
+          transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : undefined
+        }).promise;
+      }
+    } catch (err) {
+      console.error('Kunde inte visa PDF:', err);
+      pages.classList.add('hidden');
+      fallback.classList.remove('hidden');
+      fallback.classList.add('flex');
+    }
+  }
+  document.querySelectorAll('.pdf-viewer').forEach(renderViewer);
+</script>

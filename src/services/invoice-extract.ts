@@ -88,6 +88,28 @@ export function matchRule(fromHeader: string, subject: string, rules: SenderRule
   );
 }
 
+/** Receipt rules only look at the sender and an optional subject filter – a receipt rarely says "invoice". */
+export function matchReceiptRule(fromHeader: string, subject: string, rules: SenderRule[]): SenderRule | null {
+  const address = emailAddress(fromHeader);
+  const subjectLower = subject.toLowerCase();
+  return (
+    rules.find((rule) => {
+      const wanted = rule.from_address.toLowerCase();
+      const senderMatches = wanted.startsWith("@") ? address.endsWith(wanted) : address === wanted;
+      return senderMatches && (!rule.subject_contains || subjectLower.includes(rule.subject_contains.toLowerCase()));
+    }) || null
+  );
+}
+
+/** "order number DISTRI-ORD08544", "Receipt #12345", "faktura 4567890123" */
+export function extractReferenceFromSubject(subject: string): string | null {
+  const m =
+    subject.match(/order\s+(?:number|no\.?|nr\.?|#)\s*:?\s*([A-Z0-9][\w-]{2,})/i) ||
+    subject.match(/(?:invoice|faktura|kvitto|receipt|transaction|transaktion)\s*(?:number|no\.?|nr\.?|#|id)?\s*:?\s*([A-Z0-9][\w-]{3,})/i) ||
+    subject.match(/#\s?([A-Z0-9][\w-]{3,})/i);
+  return m ? m[1] : null;
+}
+
 export function resolveVendorName(fromHeader: string, subject: string, rule: SenderRule | null): string {
   // inFakt is an invoicing platform shared by several suppliers – the subject tells them apart
   if (emailAddress(fromHeader).endsWith("@infakt.pl")) {

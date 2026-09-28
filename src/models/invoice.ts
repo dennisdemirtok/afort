@@ -1,6 +1,8 @@
 import { getDb } from "./database";
 import { v4 as uuidv4 } from "uuid";
 import { extractInvoiceNumberFromSubject } from "../services/invoice-extract";
+import { isValidIban } from "../services/pdf-parser";
+import { getMeta, setMeta } from "./database";
 
 export interface Invoice {
   id: string;
@@ -401,4 +403,73 @@ export function repairInvoiceNumbersFromSubjects(): number {
   });
   run();
   return repaired;
+}
+
+// ---- Pro forma invoices ----
+
+export interface ProformaRef {
+  id: string;
+  vendor_name: string | null;
+  proforma_number: string | null;
+  amount: number | null;
+  currency: string | null;
+  received_at: string | null;
+}
+
+/** Vendors whose pro forma is followed by a final invoice (FD …) for the same purchase. */
+export const PROFORMA_SKIP_VENDORS = ["Feelgood SP"];
+
+export function isProforma(subject: string | null, invoiceNumber: string | null): boolean {
+  return /pro\s*-?\s*forma/i.test(subject || "") || /^PROF\b/i.test(invoiceNumber || "");
+}
+
+export function rememberProforma(vendorName: string | null, number: string | null, amount: number | null, currency: string | null, receivedAt: string | null): void {
+  if (!number) return;
+  const db = getDb();
+  const exists = db.prepare("SELECT 1 FROM proforma_refs WHERE vendor_name IS ? AND proforma_number = ?").get(vendorName, number);
+  if (exists) return;
+  db.prepare("INSERT INTO proforma_refs (id, vendor_name, proforma_number, amount, currency, received_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+    uuidv4(), vendorName, number, amount, currency, receivedAt
+  );
+}
+
+export function findProformaRef(text: string): ProformaRef | undefined {
+  const wanted = normalizeInvoiceNumber(text);
+  if (wanted.length < 4) return undefined;
+  const refs = getDb().prepare("SELECT * FROM proforma_refs").all() as ProformaRef[];
+  return refs.find((r) => {
+    const key = normalizeInvoiceNumber(r.proforma_number || "");
+    return key.length >= 4 && (wanted === key || wanted.includes(key));
+  });
+}
+
+/**
+ * One-time cleanup: pro forma invoices from vendors that always follow up with a
+ * final invoice are removed (their number is kept in proforma_refs so that bank
+ * rows quoting the pro forma still match the final invoice). Runs once per database.
+ */
+export function removeProformaInvoices(vendorNames: string[] = PROFORMA_SKIP_VENDORS): number {
+  if (getMeta("proforma_cleanup_v1")) return 0;
+  const db = getDb();
+  const rows = db.prepare(
+    `SELECT * FROM invoices WHERE vendor_name IN (${vendorNames.map(() => "?").join(",")})
+       AND (invoice_number LIKE 'PROF %' OR invoice_number LIKE 'PROF/%' OR LOWER(subject) LIKE '%pro forma%' OR LOWER(subject) LIKE '%proforma%')`
+  ).all(...vendorNames) as Invoice[];
+  for (const r of rows) rememberProforma(r.vendor_name, r.invoice_number, r.amount, r.currency, r.received_at);
+  const removed = rows.length ? deleteInvoices(rows.map((r) => r.id)) : 0;
+  setMeta("proforma_cleanup_v1", `${removed} removed ${new Date().toISOString()}`);
+  return removed;
+}
+
+/** Older parser versions stored fragments like "SE916000" as IBAN. Clears anything that fails the check digits. */
+export function repairInvalidIbans(): number {
+  const db = getDb();
+  const rows = db.prepare("SELECT id, iban FROM invoices WHERE iban IS NOT NULL AND COALESCE(manually_edited, 0) = 0").all() as { id: string; iban: string }[];
+  const clear = db.prepare("UPDATE invoices SET iban = NULL WHERE id = ?");
+  let n = 0;
+  for (const r of rows) {
+    const iban = r.iban.replace(/\s/g, "").toUpperCase();
+    if (!isValidIban(iban)) { clear.run(r.id); n++; }
+  }
+  return n;
 }
