@@ -9,6 +9,7 @@ import { requireAuth } from "./middleware/auth";
 import { pollGmail, isGmailConfigured } from "./services/gmail";
 import { ensureAdminExists } from "./models/user";
 import { repairInvoiceNumbersFromSubjects } from "./models/invoice";
+import { backfillIbansFromPdfs } from "./services/maintenance";
 import { viewHelpers, buildIconFontUrl } from "./routes/shared";
 import apiRoutes from "./routes/api";
 import webRoutes from "./routes/web";
@@ -87,6 +88,11 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
 
 app.listen(env.port, () => {
   console.log(`[AFORT] Server running on port ${env.port} (${env.isProduction ? "production" : "development"})`);
+
+  // Fill in bank accounts the parser used to miss – in the background, never blocking requests
+  backfillIbansFromPdfs()
+    .then((n) => { if (n > 0) console.log(`[AFORT] Filled in IBAN on ${n} invoices from their PDFs`); })
+    .catch((err) => console.error("[AFORT] IBAN backfill failed:", err));
 
   if (!isGmailConfigured()) {
     console.warn("[AFORT] Gmail is not configured – automatic fetching is off.");

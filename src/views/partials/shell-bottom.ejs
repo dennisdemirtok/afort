@@ -35,6 +35,7 @@
     var NOTIF_ICONS = {
       new_invoice: '<span class="icon text-primary">receipt_long</span>',
       reminder: '<span class="icon text-red-600">notification_important</span>',
+      warning: '<span class="icon text-amber-600">warning</span>',
       info: '<span class="icon text-ink-muted">info</span>'
     };
 
@@ -67,7 +68,7 @@
           '<span class="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-surface-low">' + (NOTIF_ICONS[n.type] || NOTIF_ICONS.info) + '</span>' +
           '<span class="min-w-0 flex-grow">' +
             '<span class="block truncate text-sm font-semibold">' + escapeHtml(n.title) + '</span>' +
-            (n.message ? '<span class="block truncate text-xs text-ink-muted">' + escapeHtml(n.message) + '</span>' : '') +
+            (n.message ? '<span class="line-clamp-2 text-xs text-ink-muted">' + escapeHtml(n.message) + '</span>' : '') +
             '<span class="mt-0.5 block text-[11px] text-ink-faint">' + timeAgo(n.created_at) + '</span>' +
           '</span></a>';
       }).join('');

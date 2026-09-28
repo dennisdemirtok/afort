@@ -4,11 +4,14 @@ import path from "path";
 import { env } from "../config/env";
 import { getDb } from "../models/database";
 import {
+  Invoice,
   createInvoice,
   updateInvoice,
   getInvoiceByMessageId,
   isMessageDeleted,
   findByVendorAndNumber,
+  latestPaymentAccountForVendor,
+  paymentAccount,
 } from "../models/invoice";
 import { listRules } from "../models/rule";
 import { createNotification } from "../models/notification";
@@ -139,6 +142,31 @@ function savePdf(messageId: string, filename: string, data: Buffer, receivedAt: 
 
 type Outcome = "created" | "updated" | "skipped";
 
+function forget(messageId: string) {
+  getDb().prepare("INSERT OR IGNORE INTO deleted_messages (gmail_message_id) VALUES (?)").run(messageId);
+}
+
+/** A vendor is chasing an invoice we already have. */
+function notifyReminder(vendorName: string, invoiceNumber: string, same: Invoice[]) {
+  const unpaid = same.find((s) => s.status !== "paid");
+  if (unpaid) {
+    createNotification(
+      "reminder",
+      `Betalningspåminnelse från ${vendorName}`,
+      `Faktura ${invoiceNumber} är inte markerad som betald`,
+      `/invoices/${unpaid.id}`
+    );
+    return;
+  }
+  // We think it is paid, the vendor does not – the money may have gone to an old account
+  createNotification(
+    "warning",
+    "Påminnelse om betald faktura",
+    `${vendorName} påminner om ${invoiceNumber}, som är markerad betald hos oss – kontrollera att betalningen gick till rätt konto`,
+    `/invoices/${same[0].id}`
+  );
+}
+
 async function processMessage(messageId: string, mode: PollMode, labelId: string | null): Promise<Outcome> {
   const existing = getInvoiceByMessageId(messageId);
   if (existing && mode === "new") return "skipped";
@@ -177,8 +205,10 @@ async function processMessage(messageId: string, mode: PollMode, labelId: string
   }
 
   const vendorName = resolveVendorName(from, subject, rule);
+  const subjectNumber = extractInvoiceNumberFromSubject(subject);
+  const reminder = isReminder(subject);
   // The subject line is more reliable than the PDF, which often yields customer numbers
-  const invoiceNumber = extractInvoiceNumberFromSubject(subject) || parsed.invoiceNumber;
+  const invoiceNumber = subjectNumber || parsed.invoiceNumber;
   const amount = parsed.amount ?? extractAmountFromSubject(subject);
   let currency = parsed.currency || "SEK";
   if (EUR_VENDORS.includes(vendorName) && (!parsed.currency || parsed.currency === "PLN")) currency = "EUR";
@@ -212,24 +242,29 @@ async function processMessage(messageId: string, mode: PollMode, labelId: string
   // Reminders and forwarded copies of an invoice we already have must not become new invoices
   if (invoiceNumber) {
     const same = findByVendorAndNumber(vendorName, invoiceNumber);
-    const reminder = isReminder(subject);
     const sameAmount = same.some((s) => s.amount != null && amount != null && Math.abs(s.amount - amount) < 0.005);
     if (same.length > 0 && (reminder || sameAmount)) {
-      getDb().prepare("INSERT OR IGNORE INTO deleted_messages (gmail_message_id) VALUES (?)").run(messageId);
-      if (reminder && mode === "new") {
-        const unpaid = same.find((s) => s.status !== "paid");
-        if (unpaid) {
-          createNotification(
-            "reminder",
-            `Betalningspåminnelse från ${vendorName}`,
-            `Faktura ${invoiceNumber} är inte markerad som betald`,
-            `/invoices/${unpaid.id}`
-          );
-        }
-      }
+      forget(messageId);
+      if (reminder && mode === "new") notifyReminder(vendorName, invoiceNumber, same);
       await markProcessed(messageId, labelId);
       return "skipped";
     }
+  }
+
+  // A reminder that names no invoice ("Wezwanie do zapłaty") carries a statement, not an
+  // invoice – point the user to the mail instead of inventing an invoice from it
+  if (reminder && !subjectNumber) {
+    forget(messageId);
+    if (mode === "new") {
+      createNotification(
+        "reminder",
+        `Betalningskrav från ${vendorName}`,
+        `"${subject.substring(0, 80)}" – öppna mailet i Gmail för att se vilka fakturor som avses`,
+        "/invoices?status=new"
+      );
+    }
+    await markProcessed(messageId, labelId);
+    return "skipped";
   }
 
   const pdfPath = savePdf(messageId, attachment.filename, attachment.data, receivedAt);
@@ -245,6 +280,19 @@ async function processMessage(messageId: string, mode: PollMode, labelId: string
       [invoiceNumber, amountText].filter(Boolean).join(" · ") || subject.substring(0, 60),
       `/invoices/${invoice.id}`
     );
+
+    // Paying to an account the vendor never used before deserves a second look
+    const account = paymentAccount(fields);
+    const previous = latestPaymentAccountForVendor(vendorName, invoice.id, fields.received_at);
+    const previousAccount = previous ? paymentAccount(previous) : null;
+    if (account && previousAccount && previousAccount !== account) {
+      createNotification(
+        "warning",
+        `Nytt bankkonto hos ${vendorName}`,
+        `Faktura ${invoiceNumber || ""} anger ${account}, tidigare ${previousAccount}. Kontrollera innan betalning.`,
+        `/invoices/${invoice.id}`
+      );
+    }
   }
 
   console.log(`[Gmail] Imported: ${subject} (${vendorName})`);

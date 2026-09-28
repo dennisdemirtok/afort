@@ -282,6 +282,24 @@ export function getInvoicesByIds(ids: string[]): Invoice[] {
   return getDb().prepare(`SELECT * FROM invoices WHERE id IN (${placeholders}) ORDER BY received_at DESC`).all(...ids) as Invoice[];
 }
 
+/** The account a vendor last asked us to pay to, so that a change can be flagged. */
+export function latestPaymentAccountForVendor(
+  vendorName: string,
+  excludeId: string,
+  receivedBefore: string | null
+): Pick<Invoice, "id" | "invoice_number" | "iban" | "bankgiro" | "plusgiro"> | undefined {
+  return getDb().prepare(
+    `SELECT id, invoice_number, iban, bankgiro, plusgiro FROM invoices
+     WHERE vendor_name = ? AND id != ? AND received_at < ?
+       AND (iban IS NOT NULL OR bankgiro IS NOT NULL OR plusgiro IS NOT NULL)
+     ORDER BY received_at DESC LIMIT 1`
+  ).get(vendorName, excludeId, receivedBefore || "9999") as any;
+}
+
+export function paymentAccount(inv: Pick<Invoice, "iban" | "bankgiro" | "plusgiro">): string | null {
+  return inv.iban || inv.bankgiro || inv.plusgiro || null;
+}
+
 export function normalizeInvoiceNumber(num: string): string {
   return num.replace(/\s+/g, "").toLowerCase();
 }

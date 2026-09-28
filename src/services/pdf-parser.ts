@@ -99,8 +99,13 @@ function extractOcr(text: string): string | null {
 }
 
 function extractBankgiro(text: string): string | null {
-  const match = text.match(/(?:bankgiro|bg)\s*:?\s*(\d{3,4}-?\d{4})/i);
-  return match ? match[1] : null;
+  const match =
+    text.match(/(?:bankgiro|bg)\s*:?\s*(\d{3,4}-?\d{4})\b/i) ||
+    // Blue Water: "55936546 (Bankgiro)"
+    text.match(/\b(\d{3,4}-?\d{4})\s*\(Bankgiro\)/i);
+  if (!match) return null;
+  const digits = match[1].replace("-", "");
+  return `${digits.slice(0, -4)}-${digits.slice(-4)}`;
 }
 
 function extractPlusgiro(text: string): string | null {
@@ -109,9 +114,32 @@ function extractPlusgiro(text: string): string | null {
 }
 
 function extractIban(text: string): string | null {
-  const match = text.match(/(?:IBAN)\s*:?\s*([A-Z]{2}\d{2}[\s]?[\dA-Z]{4,30})/i);
-  if (match) return match[1].replace(/\s/g, "").toUpperCase();
+  const candidates: string[] = [];
+  // "IBAN: DK12 3456 7890 1234 56" – groups may be separated by spaces
+  const labelled = text.match(/\bIBAN\b[^\n]{0,12}?([A-Z]{2}\s?\d{2}(?:\s?[A-Z0-9]{2,4}){3,8})/i);
+  if (labelled) candidates.push(labelled[1]);
+  // Some layouts (Blue Water) put the labels and the values on separate lines
+  for (const m of text.matchAll(/\b([A-Z]{2}\d{2}[A-Z0-9]{11,30})\b/g)) candidates.push(m[1]);
+  // Polish invoices (Fancywork, inFakt): "Bank: 50 1140 2004 0000 3712 0700 7950" – a domestic
+  // account number (NRB) is the IBAN without "PL"
+  for (const m of text.matchAll(/(?:\b(?:bank|konto|konta|rachunek|rachunku|account)\b[^\n]{0,20}?|\bPL\s?)(\d{2}(?:\s?\d{4}){6})\b/gi)) {
+    candidates.push("PL" + m[1]);
+  }
+  for (const candidate of candidates) {
+    const iban = candidate.replace(/\s/g, "").toUpperCase();
+    if (isValidIban(iban)) return iban;
+  }
   return null;
+}
+
+/** ISO 13616 check digits – a misread account number must never end up in a payment file. */
+export function isValidIban(iban: string): boolean {
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) return false;
+  const rearranged = iban.slice(4) + iban.slice(0, 4);
+  const digits = rearranged.replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
+  let remainder = 0;
+  for (const d of digits) remainder = (remainder * 10 + Number(d)) % 97;
+  return remainder === 1;
 }
 
 function extractInvoiceNumber(text: string): string | null {

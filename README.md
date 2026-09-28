@@ -11,7 +11,11 @@ betalfiler (ISO 20022 pain.001) för Nordea.
 - **Fakturanummer** tas i första hand från ämnesraden (`src/services/invoice-extract.ts`), övrigt från
   PDF:en (`src/services/pdf-parser.ts`).
 - **Påminnelser och vidarebefordrade kopior** av en faktura som redan finns blir inte nya fakturor;
-  en påminnelse om en obetald faktura ger i stället en notis.
+  de ger i stället en notis: röd om fakturan är obetald hos oss, gul varning om den är markerad
+  betald men leverantören ändå påminner (betalningen kan ha gått till fel konto). Ett betalningskrav
+  utan fakturanummer i ämnesraden ("Wezwanie do zapłaty") ger en notis som pekar till mailet.
+- **Bankkonto** läses ur PDF:en (IBAN, även polska kontonummer) och kontrollsiffran verifieras. Får en
+  leverantör ett annat konto än på sin förra faktura visas en gul varning innan man betalar.
 - **Raderade fakturor** kommer aldrig tillbaka, inte heller vid *Läs om alla fakturor*.
 - **Läs om alla fakturor** (Inställningar → Underhåll) tolkar om alla mail i bakgrunden men rör inte
   status, betalmarkeringar eller fakturor som ändrats för hand.

@@ -10,14 +10,20 @@ export interface SenderRule {
 }
 
 // A mail must look like it is about an invoice before we even consider it
-const INVOICE_KEYWORDS = /faktur|invoice|rechnung|creditnote|kreditnota|pro\s*forma|bifogas|payment|zapłat|zahlung/i;
+// ("fv" = Polish shorthand for faktura; "brak płatności", "zaległości", "wezwanie" are Polish reminder wordings)
+const INVOICE_KEYWORDS = /faktur|\bfv\b|invoice|rechnung|creditnote|kreditnota|pro\s*forma|bifogas|payment|zapłat|płatno|zaległ|wezwanie|należno|zahlung/i;
 
-const REMINDER_KEYWORDS = /zahlungserinnerung|\boutstanding\b|przypomnienie|påminnelse|\breminder\b|\boverdue\b|mahnung/i;
+// Mail that asks for payment of something we should already have, rather than a new invoice.
+// Fancywork's staff send manual reminders with just "FV WDT <number>" as subject.
+const REMINDER_KEYWORDS = /zahlungserinnerung|\boutstanding\b|przypomnienie|påminnelse|\breminder\b|\boverdue\b|mahnung|brak\s+płatno|zaległ|wezwanie|należno|^\s*fv\s+wdt\b/i;
 
 // Ordered from most to least specific. First match wins.
 const INVOICE_NUMBER_PATTERNS: RegExp[] = [
   // Fancywork: "Faktura 8/4/2026/WDT/DTF za druki DTF z dnia ..."
   /Faktura\s+([\d/]+\/[A-Z]+(?:\/[A-Z]+)?)\s+za\b/i,
+  // Fancywork reminders: "Brak płatności za 21/4/2026/WDT/DTF z dnia ...", "FV WDT 2/8/2026/WDT/DTF"
+  /Brak\s+płatno\S*\s+za\s+([\d/]+\/[A-Z]+(?:\/[A-Z]+)?)/i,
+  /^\s*FV\s+WDT\s+([\d/]+\/[A-Z]+(?:\/[A-Z]+)?)/i,
   // Blue Water Shipping: "Invoice/Creditnote 16276606 from Blue Water"
   /Invoice\/Creditnote\s+(\d+)/i,
   // DTFtransfer: "Rechnung (Ref ZB/2026/03/614)", "Zahlungserinnerung (Ref ...)"
@@ -74,7 +80,10 @@ export function matchRule(fromHeader: string, subject: string, rules: SenderRule
       const wanted = rule.from_address.toLowerCase();
       // "@example.com" matches every sender on that domain
       const senderMatches = wanted.startsWith("@") ? address.endsWith(wanted) : address === wanted;
-      return senderMatches && (!rule.subject_contains || subjectLower.includes(rule.subject_contains.toLowerCase()));
+      // A subject filter ("Faktura") keeps order mail out, but must not hide the vendor's reminders
+      const subjectMatches =
+        !rule.subject_contains || subjectLower.includes(rule.subject_contains.toLowerCase()) || isReminder(subject);
+      return senderMatches && subjectMatches;
     }) || null
   );
 }
