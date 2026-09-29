@@ -3,6 +3,16 @@ import path from "path";
 
 dotenv.config();
 
+/** "viwrsi-jk", "viwrsi-jk.myshopify.com" or an admin URL → "viwrsi-jk.myshopify.com" */
+function normalizeShopDomain(value: string): string {
+  let v = value.trim().toLowerCase().replace(/^https?:\/\//, "");
+  const adminStore = v.match(/admin\.shopify\.com\/store\/([a-z0-9-]+)/);
+  if (adminStore) return `${adminStore[1]}.myshopify.com`;
+  v = v.replace(/\/.*$/, "");
+  if (v && !v.includes(".")) v = `${v}.myshopify.com`;
+  return v;
+}
+
 const databasePath = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "invoice.db");
 const dataDir = path.dirname(databasePath);
 
@@ -39,8 +49,12 @@ export const env = {
   receiptsDir: path.join(dataDir, "receipts"),
   shopifyDir: path.join(dataDir, "shopify"),
 
-  // Shopify Admin API (custom app in the store: read_shopify_payments_payouts + read_shopify_payments_accounts)
-  shopifyStoreDomain: (process.env.SHOPIFY_STORE_DOMAIN || "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, ""),
+  // Shopify Admin API: a Dev Dashboard app installed on the store (read_shopify_payments_payouts +
+  // read_shopify_payments_accounts). Client ID + secret are exchanged for a 24-hour token.
+  // SHOPIFY_ACCESS_TOKEN still works for an old admin-created custom app.
+  shopifyStoreDomain: normalizeShopDomain(process.env.SHOPIFY_STORE_DOMAIN || ""),
+  shopifyClientId: (process.env.SHOPIFY_CLIENT_ID || "").trim(),
+  shopifyClientSecret: (process.env.SHOPIFY_CLIENT_SECRET || "").trim(),
   shopifyAccessToken: (process.env.SHOPIFY_ACCESS_TOKEN || "").trim(),
   shopifyApiVersion: process.env.SHOPIFY_API_VERSION || "2026-07",
 

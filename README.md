@@ -25,9 +25,11 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   Finns en PDF sparas den, annars sparas själva mailet. Belopp och referens tolkas så gott det går och
   kan rättas för hand; bokföraren markerar kvittot som bokfört. Avsändare styrs under *Inställningar →
   Kvitton som hämtas in*.
-- **Shopify** (fliken *Shopify*): utbetalningar från Shopify Payments hämtas via Admin API (en egen app i
-  butiken med `read_shopify_payments_payouts` + `read_shopify_payments_accounts`; sätt
-  `SHOPIFY_STORE_DOMAIN` och `SHOPIFY_ACCESS_TOKEN`). Varje utbetalning får en CSV med alla ordrar,
+- **Shopify** (fliken *Shopify*): utbetalningar från Shopify Payments hämtas via Admin API. Appen *AFORT*
+  i Shopifys Dev Dashboard (organisation Transfercraft) är installerad i butiken med
+  `read_shopify_payments_payouts` + `read_shopify_payments_accounts`. Sätt `SHOPIFY_STORE_DOMAIN`
+  (`viwrsi-jk.myshopify.com`), `SHOPIFY_CLIENT_ID` och `SHOPIFY_CLIENT_SECRET`; AFORT hämtar en ny
+  24-timmarstoken med client credentials när den behövs. Varje utbetalning får en CSV med alla ordrar,
   återbetalningar och avgifter plus en sammanställning. Hämtas varje morgon och på knapptryck.
 - **Bankutdrag**: ladda upp Nordeas CSV, granska träffarna och bocka av betalda fakturor. Inbetalningar
   som stämmer med en Shopify-utbetalning (belopp, några dagar efter) bockas av på samma sätt.

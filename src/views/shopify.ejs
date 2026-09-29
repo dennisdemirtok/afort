@@ -23,14 +23,17 @@
 <% if (!configured) { %>
   <div class="card mb-8 p-6">
     <h2 class="section-title"><span class="icon text-primary">link</span>Koppla butiken</h2>
-    <p class="mt-1 text-sm text-ink-muted">AFORT hämtar utbetalningarna via en egen app i Shopify-butiken. Det tar några minuter och görs en gång.</p>
+    <p class="mt-1 text-sm text-ink-muted">Appen <span class="font-semibold">AFORT</span> finns i Shopifys Dev Dashboard och är installerad i butiken med läsrätt till Shopify Payments. Det som återstår är att ge AFORT appens inloggningsuppgifter.</p>
     <ol class="mt-5 space-y-3 text-sm">
-      <li class="flex gap-3"><span class="badge badge-new">1</span><span>I Shopify-admin: <span class="font-semibold">Inställningar → Appar och försäljningskanaler → Utveckla appar → Skapa en app</span>. Kalla den ”AFORT”.</span></li>
-      <li class="flex gap-3"><span class="badge badge-new">2</span><span>Under <span class="font-semibold">Konfigurera Admin API-behörigheter</span>, bocka i <span class="font-mono">read_shopify_payments_payouts</span> och <span class="font-mono">read_shopify_payments_accounts</span>. Spara.</span></li>
-      <li class="flex gap-3"><span class="badge badge-new">3</span><span><span class="font-semibold">Installera appen</span> och kopiera <span class="font-semibold">Admin API-åtkomsttoken</span> (visas bara en gång, börjar med <span class="font-mono">shpat_</span>).</span></li>
-      <li class="flex gap-3"><span class="badge badge-new">4</span><span>Lägg in två variabler i Railway och starta om: <span class="font-mono">SHOPIFY_STORE_DOMAIN</span> (t.ex. <span class="font-mono">transfercraft.myshopify.com</span>) och <span class="font-mono">SHOPIFY_ACCESS_TOKEN</span>.</span></li>
+      <li class="flex gap-3"><span class="badge badge-new">1</span><span>Öppna <a href="https://dev.shopify.com/dashboard" target="_blank" rel="noopener" class="font-semibold text-primary hover:underline">dev.shopify.com</a> → <span class="font-semibold">Apps → AFORT</span>. Under <span class="font-semibold">Credentials</span> finns Client ID och Client secret (kopieringsknappen till höger).</span></li>
+      <li class="flex gap-3"><span class="badge badge-new">2</span><span>I Railway, tjänsten AFORT → <span class="font-semibold">Variables</span>, lägg till det som saknas nedan och tryck <span class="font-semibold">Deploy</span>.</span></li>
     </ol>
-    <p class="hint">Token ger bara läsrättigheter till utbetalningar – inget annat i butiken kan ändras.</p>
+    <ul class="mt-4 space-y-1 rounded-lg border border-line bg-surface-low px-4 py-3 font-mono text-xs">
+      <li class="<%= missing.includes('SHOPIFY_STORE_DOMAIN') ? 'text-ink' : 'text-emerald-700' %>"><span class="icon icon-sm align-middle"><%= missing.includes('SHOPIFY_STORE_DOMAIN') ? 'radio_button_unchecked' : 'check_circle' %></span> SHOPIFY_STORE_DOMAIN = viwrsi-jk.myshopify.com</li>
+      <li class="<%= missing.includes('SHOPIFY_CLIENT_ID') ? 'text-ink' : 'text-emerald-700' %>"><span class="icon icon-sm align-middle"><%= missing.includes('SHOPIFY_CLIENT_ID') ? 'radio_button_unchecked' : 'check_circle' %></span> SHOPIFY_CLIENT_ID = Client ID från appen AFORT</li>
+      <li class="<%= missing.includes('SHOPIFY_CLIENT_SECRET') ? 'text-ink' : 'text-emerald-700' %>"><span class="icon icon-sm align-middle"><%= missing.includes('SHOPIFY_CLIENT_SECRET') ? 'radio_button_unchecked' : 'check_circle' %></span> SHOPIFY_CLIENT_SECRET = Client secret från appen AFORT</li>
+    </ul>
+    <p class="hint">Appen kan bara läsa utbetalningar och kontouppgifter för Shopify Payments – inget i butiken kan ändras. AFORT hämtar själv en ny åtkomst varje dygn.</p>
   </div>
 <% } %>
 

@@ -25,25 +25,78 @@ export function getShopifySyncStatus(): ShopifySyncStatus {
 }
 
 export function isShopifyConfigured(): boolean {
-  return !!(env.shopifyStoreDomain && env.shopifyAccessToken);
+  return !!(env.shopifyStoreDomain && (env.shopifyAccessToken || (env.shopifyClientId && env.shopifyClientSecret)));
+}
+
+/** Which Railway variables are still missing, for the setup card. */
+export function missingShopifySettings(): string[] {
+  const missing: string[] = [];
+  if (!env.shopifyStoreDomain) missing.push("SHOPIFY_STORE_DOMAIN");
+  if (!env.shopifyAccessToken) {
+    if (!env.shopifyClientId) missing.push("SHOPIFY_CLIENT_ID");
+    if (!env.shopifyClientSecret) missing.push("SHOPIFY_CLIENT_SECRET");
+  }
+  return missing;
 }
 
 export type GraphqlFn = (query: string, variables: Record<string, unknown>) => Promise<any>;
 
-/** Calls the Admin GraphQL API with the custom app's token. */
+// Client credentials tokens live for 24 hours; keep one and renew it a little early
+let cachedToken: { value: string; expiresAt: number } | null = null;
+
+async function getAccessToken(forceRefresh = false): Promise<string> {
+  if (env.shopifyAccessToken) return env.shopifyAccessToken;
+  if (!forceRefresh && cachedToken && cachedToken.expiresAt > Date.now() + 5 * 60 * 1000) return cachedToken.value;
+
+  const res = await fetch(`https://${env.shopifyStoreDomain}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: env.shopifyClientId,
+      client_secret: env.shopifyClientSecret,
+    }).toString(),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    if (/shop_not_permitted/i.test(text)) throw new Error("Shopify: appen och butiken ligger inte i samma organisation i Dev Dashboard");
+    if (res.status === 400 || res.status === 401) throw new Error("Shopify godkände inte SHOPIFY_CLIENT_ID/SHOPIFY_CLIENT_SECRET – kontrollera att de kommer från appen AFORT i Dev Dashboard och att appen är installerad i butiken");
+    throw new Error(`Shopify svarade ${res.status} när AFORT bad om en token`);
+  }
+  const body: any = JSON.parse(text);
+  if (!body.access_token) throw new Error("Shopify skickade ingen token");
+  cachedToken = { value: body.access_token, expiresAt: Date.now() + (Number(body.expires_in) || 86399) * 1000 };
+  return cachedToken.value;
+}
+
+/** Calls the Admin GraphQL API; renews the token once if Shopify says it has expired. */
 export const shopifyGraphql: GraphqlFn = async (query, variables) => {
   const url = `https://${env.shopifyStoreDomain}/admin/api/${env.shopifyApiVersion}/graphql.json`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": env.shopifyAccessToken },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (res.status === 401 || res.status === 403) throw new Error("Shopify nekade åtkomst – kontrollera SHOPIFY_ACCESS_TOKEN och appens behörigheter");
+  const call = async (token: string) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({ query, variables }),
+    });
+  let res = await call(await getAccessToken());
+  if (res.status === 401 && !env.shopifyAccessToken) res = await call(await getAccessToken(true));
+  if (res.status === 401 || res.status === 403) {
+    throw new Error("Shopify nekade åtkomst – kontrollera att appen AFORT är installerad och har behörigheterna read_shopify_payments_payouts och read_shopify_payments_accounts");
+  }
   if (!res.ok) throw new Error(`Shopify svarade ${res.status}`);
   const body: any = await res.json();
-  if (body.errors?.length) throw new Error(body.errors.map((e: any) => e.message).join("; "));
+  if (body.errors?.length) {
+    const message = body.errors.map((e: any) => e.message).join("; ");
+    if (/access denied|ACCESS_DENIED/i.test(message)) throw new Error(`Shopify nekade åtkomst till utbetalningarna (${message})`);
+    throw new Error(message);
+  }
   return body.data;
 };
+
+/** For tests: forget the cached token. */
+export function resetShopifyTokenCache(): void {
+  cachedToken = null;
+}
 
 const PAYOUTS_QUERY = `
 query AfortPayouts($first: Int!, $after: String) {
@@ -225,7 +278,7 @@ export async function syncShopifyPayouts(opts: { graphql?: GraphqlFn; maxPayouts
   if (status.running) return { ...status, busy: true };
   Object.assign(status, { running: true, startedAt: new Date().toISOString(), finishedAt: null, payouts: 0, created: 0, error: null });
   try {
-    if (!isShopifyConfigured() && !opts.graphql) throw new Error("Shopify är inte kopplat (SHOPIFY_STORE_DOMAIN / SHOPIFY_ACCESS_TOKEN saknas)");
+    if (!isShopifyConfigured() && !opts.graphql) throw new Error(`Shopify är inte kopplat (${missingShopifySettings().join(", ")} saknas i Railway)`);
     const graphql = opts.graphql || shopifyGraphql;
     const payouts = await fetchAllPayouts(graphql, opts.maxPayouts || 200);
     const transactions = payouts.length ? await fetchTransactionsByPayout(graphql, opts.maxTransactions || 5000) : new Map<string, TransactionNode[]>();

@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import fs from "fs";
 import path from "path";
 import { listPayouts, getPayout, setPayoutStatus, payoutStats } from "../models/shopify";
-import { isShopifyConfigured, syncShopifyPayouts, getShopifySyncStatus } from "../services/shopify";
+import { isShopifyConfigured, syncShopifyPayouts, getShopifySyncStatus, missingShopifySettings } from "../services/shopify";
 import { env } from "../config/env";
 
 const router = Router();
@@ -16,6 +16,7 @@ router.get("/shopify", (req: Request, res: Response) => {
     payouts: listPayouts(),
     stats: payoutStats(),
     configured: isShopifyConfigured(),
+    missing: missingShopifySettings(),
     storeDomain: env.shopifyStoreDomain,
     syncStatus: getShopifySyncStatus(),
     ok: req.query.ok || null,
