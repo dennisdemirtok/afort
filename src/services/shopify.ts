@@ -3,6 +3,7 @@ import path from "path";
 import { env } from "../config/env";
 import { getPayout, upsertPayout } from "../models/shopify";
 import { createNotification } from "../models/notification";
+import { setMeta, getMeta } from "../models/database";
 
 /**
  * Shopify Payments payouts: what Shopify transfers to the bank account, and the
@@ -103,6 +104,7 @@ query AfortPayouts($first: Int!, $after: String) {
   shopifyPaymentsAccount {
     id
     defaultCurrency
+    balance { amount currencyCode }
     payouts(first: $first, after: $after, sortKey: ISSUED_AT, reverse: true) {
       pageInfo { hasNextPage endCursor }
       nodes {
@@ -237,37 +239,53 @@ export function buildPayoutReport(payout: PayoutNode, transactions: TransactionN
   return "﻿" + lines.join("\r\n");
 }
 
-async function fetchAllPayouts(graphql: GraphqlFn, max: number): Promise<PayoutNode[]> {
+async function fetchAllPayouts(graphql: GraphqlFn, max: number): Promise<{ nodes: PayoutNode[]; balance: { amount: string; currencyCode: string }[] }> {
   const nodes: PayoutNode[] = [];
+  let balance: { amount: string; currencyCode: string }[] = [];
   let after: string | null = null;
   do {
     const data: any = await graphql(PAYOUTS_QUERY, { first: Math.min(50, max - nodes.length), after });
     const account = data?.shopifyPaymentsAccount;
     if (!account) throw new Error("Butiken har inget Shopify Payments-konto, eller så saknar appen behörigheten read_shopify_payments_accounts");
+    if (!after) balance = account.balance || [];
     nodes.push(...(account.payouts?.nodes || []));
     after = account.payouts?.pageInfo?.hasNextPage ? account.payouts.pageInfo.endCursor : null;
   } while (after && nodes.length < max);
-  return nodes;
+  return { nodes, balance };
 }
 
-async function fetchTransactionsByPayout(graphql: GraphqlFn, max: number): Promise<Map<string, TransactionNode[]>> {
-  const byPayout = new Map<string, TransactionNode[]>();
+async function fetchAllTransactions(graphql: GraphqlFn, max: number): Promise<TransactionNode[]> {
+  const all: TransactionNode[] = [];
   let after: string | null = null;
-  let fetched = 0;
   do {
-    const data: any = await graphql(TRANSACTIONS_QUERY, { first: Math.min(250, max - fetched), after });
+    const data: any = await graphql(TRANSACTIONS_QUERY, { first: Math.min(250, max - all.length), after });
     const conn = data?.shopifyPaymentsAccount?.balanceTransactions;
-    const nodes: TransactionNode[] = conn?.nodes || [];
-    fetched += nodes.length;
-    for (const t of nodes) {
-      const payoutId = t.associatedPayout?.id;
-      if (!payoutId) continue;
-      if (!byPayout.has(payoutId)) byPayout.set(payoutId, []);
-      byPayout.get(payoutId)!.push(t);
-    }
+    all.push(...(conn?.nodes || []));
     after = conn?.pageInfo?.hasNextPage ? conn.pageInfo.endCursor : null;
-  } while (after && fetched < max);
-  return byPayout;
+  } while (after && all.length < max);
+  return all;
+}
+
+export interface PendingBalance {
+  updatedAt: string;
+  currency: string | null;
+  balance: number;
+  count: number;
+  gross: number;
+  fees: number;
+  net: number;
+  transactions: { date: string; type: string; order: string | null; gross: number; fee: number; net: number; currency: string }[];
+}
+
+/** Money Shopify holds that is not part of any payout yet – what the next payout will contain. */
+export function getPendingBalance(): PendingBalance | null {
+  const raw = getMeta("shopify_pending");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as PendingBalance;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -280,8 +298,40 @@ export async function syncShopifyPayouts(opts: { graphql?: GraphqlFn; maxPayouts
   try {
     if (!isShopifyConfigured() && !opts.graphql) throw new Error(`Shopify är inte kopplat (${missingShopifySettings().join(", ")} saknas i Railway)`);
     const graphql = opts.graphql || shopifyGraphql;
-    const payouts = await fetchAllPayouts(graphql, opts.maxPayouts || 200);
-    const transactions = payouts.length ? await fetchTransactionsByPayout(graphql, opts.maxTransactions || 5000) : new Map<string, TransactionNode[]>();
+    const { nodes: payouts, balance } = await fetchAllPayouts(graphql, opts.maxPayouts || 200);
+    const allTransactions = await fetchAllTransactions(graphql, opts.maxTransactions || 5000);
+    const payoutIds = new Set(payouts.map((p) => p.id));
+    const transactions = new Map<string, TransactionNode[]>();
+    const pending: TransactionNode[] = [];
+    for (const t of allTransactions) {
+      const payoutId = t.associatedPayout?.id;
+      if (payoutId && payoutIds.has(payoutId)) {
+        if (!transactions.has(payoutId)) transactions.set(payoutId, []);
+        transactions.get(payoutId)!.push(t);
+      } else if (t.type !== "TRANSFER") {
+        pending.push(t);
+      }
+    }
+    pending.sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
+    const pendingSummary: PendingBalance = {
+      updatedAt: new Date().toISOString(),
+      currency: balance[0]?.currencyCode || pending[0]?.amount.currencyCode || null,
+      balance: balance.reduce((sum, b) => sum + (parseFloat(b.amount) || 0), 0),
+      count: pending.length,
+      gross: pending.reduce((sum, t) => sum + num(t.amount), 0),
+      fees: pending.reduce((sum, t) => sum + Math.abs(num(t.fee)), 0),
+      net: pending.reduce((sum, t) => sum + num(t.net), 0),
+      transactions: pending.map((t) => ({
+        date: t.transactionDate.slice(0, 10),
+        type: TYPE_LABELS[t.type] || t.type,
+        order: t.associatedOrder?.name || null,
+        gross: num(t.amount),
+        fee: -Math.abs(num(t.fee)),
+        net: num(t.net),
+        currency: t.amount.currencyCode,
+      })),
+    };
+    setMeta("shopify_pending", JSON.stringify(pendingSummary));
 
     for (const p of payouts) {
       const rows = transactions.get(p.id) || [];

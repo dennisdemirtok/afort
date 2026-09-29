@@ -37,6 +37,37 @@
   </div>
 <% } %>
 
+<% if (pending && (pending.count || pending.balance)) { %>
+  <details class="card mb-8 overflow-hidden">
+    <summary class="flex cursor-pointer select-none flex-wrap items-center gap-x-6 gap-y-2 px-6 py-5 hover:bg-surface-low">
+      <span class="flex items-center gap-2"><span class="icon text-amber-600">schedule</span><span class="section-title">Väntar på utbetalning</span></span>
+      <span class="font-display text-2xl font-extrabold tabular-nums"><%= h.money(pending.net, pending.currency) %></span>
+      <span class="text-sm text-ink-muted"><%= pending.count %> transaktioner · brutto <%= h.money(pending.gross, null) %> · avgifter −<%= h.money(pending.fees, null) %></span>
+      <span class="ml-auto text-xs text-ink-faint">Uppdaterat <%= h.date(pending.updatedAt) %> · visa ordrar</span>
+    </summary>
+    <div class="overflow-x-auto border-t border-line">
+      <table class="w-full border-collapse">
+        <thead class="border-b border-line bg-surface-low">
+          <tr><th class="th">Datum</th><th class="th">Typ</th><th class="th">Order</th><th class="th text-right">Brutto</th><th class="th text-right">Avgift</th><th class="th text-right">Netto</th></tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          <% pending.transactions.forEach(function (t) { %>
+            <tr>
+              <td class="td whitespace-nowrap text-ink-muted"><%= t.date %></td>
+              <td class="td"><%= t.type %></td>
+              <td class="td font-mono text-[13px]"><%= t.order || '–' %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= h.money(t.gross, null) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums text-ink-muted"><%= h.money(t.fee, null) %></td>
+              <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= h.money(t.net, t.currency) %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+    <p class="border-t border-line bg-surface-low px-6 py-3 text-xs text-ink-muted">Pengar som Shopify håller men inte har betalat ut än. När utbetalningen sker flyttas de till en rad nedan, med underlag att ladda ner.</p>
+  </details>
+<% } %>
+
 <div class="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
   <div class="card p-5">
     <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Utbetalningar</span>

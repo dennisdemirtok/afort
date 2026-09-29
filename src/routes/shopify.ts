@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import fs from "fs";
 import path from "path";
 import { listPayouts, getPayout, setPayoutStatus, payoutStats } from "../models/shopify";
-import { isShopifyConfigured, syncShopifyPayouts, getShopifySyncStatus, missingShopifySettings } from "../services/shopify";
+import { isShopifyConfigured, syncShopifyPayouts, getShopifySyncStatus, missingShopifySettings, getPendingBalance } from "../services/shopify";
 import { env } from "../config/env";
 
 const router = Router();
@@ -17,6 +17,7 @@ router.get("/shopify", (req: Request, res: Response) => {
     stats: payoutStats(),
     configured: isShopifyConfigured(),
     missing: missingShopifySettings(),
+    pending: getPendingBalance(),
     storeDomain: env.shopifyStoreDomain,
     syncStatus: getShopifySyncStatus(),
     ok: req.query.ok || null,
@@ -28,7 +29,9 @@ router.post("/shopify/sync", async (_req: Request, res: Response) => {
   const result = await syncShopifyPayouts();
   if (result.busy) return res.redirect(flash("/shopify", "err", "En hämtning pågår redan."));
   if (result.error) return res.redirect(flash("/shopify", "err", result.error));
-  res.redirect(flash("/shopify", "ok", result.created ? `${result.created} nya utbetalningar hämtade.` : `Klart – ${result.payouts} utbetalningar är uppdaterade, inga nya.`));
+  const pending = getPendingBalance();
+  const pendingText = pending && pending.count ? ` ${pending.count} försäljningar väntar på nästa utbetalning.` : "";
+  res.redirect(flash("/shopify", "ok", (result.created ? `${result.created} nya utbetalningar hämtade.` : `Klart – ${result.payouts} utbetalningar är uppdaterade, inga nya.`) + pendingText));
 });
 
 router.get("/shopify/:id/report", (req: Request, res: Response) => {
