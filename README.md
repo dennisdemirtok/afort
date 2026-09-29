@@ -29,7 +29,8 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   i Shopifys Dev Dashboard (organisation Transfercraft) är installerad i butiken med
   `read_shopify_payments_payouts` + `read_shopify_payments_accounts`. Sätt `SHOPIFY_STORE_DOMAIN`
   (`viwrsi-jk.myshopify.com`), `SHOPIFY_CLIENT_ID` och `SHOPIFY_CLIENT_SECRET`; AFORT hämtar en ny
-  24-timmarstoken med client credentials när den behövs. Varje utbetalning får en CSV med alla ordrar,
+  24-timmarstoken med client credentials när den behövs. All försäljning har 25 % moms (`SHOPIFY_VAT_RATE`),
+  så momsen räknas fram ur bruttot och visas i fliken och i underlaget. Shopifys avgifter är utan moms. Varje utbetalning får en CSV med alla ordrar,
   återbetalningar och avgifter plus en sammanställning. Hämtas varje morgon och på knapptryck.
 - **Bankutdrag**: ladda upp Nordeas CSV, granska träffarna och bocka av betalda fakturor. Inbetalningar
   som stämmer med en Shopify-utbetalning (belopp, några dagar efter) bockas av på samma sätt.

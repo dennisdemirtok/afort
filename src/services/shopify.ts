@@ -201,6 +201,14 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const num = (m: { amount: string } | null | undefined): number => (m ? parseFloat(m.amount) || 0 : 0);
+
+/** VAT included in a gross amount (25 % → 20 % of the gross). Rounded to öre. */
+export function vatOf(gross: number, rate = env.shopifyVatRate): number {
+  return Math.round(((gross * rate) / (100 + rate)) * 100) / 100;
+}
+
+/** Sales and refunds carry VAT; Shopify's own fees, transfers and reserves do not. */
+const VAT_TYPES = new Set(["CHARGE", "REFUND", "DISPUTE", "DISPUTE_REVERSAL", "CHARGEBACK"]);
 const csvNum = (n: number) => n.toFixed(2).replace(".", ",");
 const csvCell = (v: string | number | null | undefined) => {
   const s = v == null ? "" : String(v);
@@ -209,16 +217,23 @@ const csvCell = (v: string | number | null | undefined) => {
 
 /** The CSV the bookkeeper opens: every transaction behind the payout, then the totals. */
 export function buildPayoutReport(payout: PayoutNode, transactions: TransactionNode[]): string {
+  const rate = env.shopifyVatRate;
   const lines: string[] = [];
-  lines.push(["Datum", "Typ", "Order", "Brutto", "Avgift", "Netto", "Valuta", "Kommentar"].join(";"));
+  lines.push(["Datum", "Typ", "Order", "Brutto inkl. moms", `Moms ${rate} %`, "Exkl. moms", "Avgift (ingen moms)", "Netto", "Valuta", "Kommentar"].join(";"));
   const sorted = [...transactions].sort((a, b) => a.transactionDate.localeCompare(b.transactionDate));
+  let salesVat = 0;
   for (const t of sorted) {
     if (t.type === "TRANSFER") continue; // the payout itself
+    const gross = num(t.amount);
+    const vat = VAT_TYPES.has(t.type) ? vatOf(gross) : 0;
+    salesVat += vat;
     lines.push([
       t.transactionDate.slice(0, 10),
       TYPE_LABELS[t.type] || t.type,
       csvCell(t.associatedOrder?.name || ""),
-      csvNum(num(t.amount)),
+      csvNum(gross),
+      csvNum(vat),
+      csvNum(gross - vat),
       csvNum(-Math.abs(num(t.fee))),
       csvNum(num(t.net)),
       t.amount.currencyCode,
@@ -227,16 +242,22 @@ export function buildPayoutReport(payout: PayoutNode, transactions: TransactionN
   }
   const s = payout.summary;
   const cur = payout.net.currencyCode;
+  const salesGross = num(s.chargesGross);
+  const refundsGross = -Math.abs(num(s.refundsFeeGross));
+  const fees = num(s.chargesFee) + num(s.refundsFee) + num(s.adjustmentsFee) + num(s.reservedFundsFee);
+  const row = (label: string, gross: string, vat: string, exVat: string, fee: string, net: string) =>
+    [label, "", "", gross, vat, exVat, fee, net, cur].join(";");
   lines.push("");
-  lines.push(["Sammanställning utbetalning", payout.legacyResourceId, "", "", "", "", "", ""].join(";"));
+  lines.push(["Sammanställning utbetalning", payout.legacyResourceId].join(";"));
   lines.push(["Utbetalningsdatum", payout.issuedAt.slice(0, 10)].join(";"));
-  lines.push(["Försäljning brutto", "", "", csvNum(num(s.chargesGross)), csvNum(-num(s.chargesFee)), csvNum(num(s.chargesGross) - num(s.chargesFee)), cur].join(";"));
-  lines.push(["Återbetalningar", "", "", csvNum(-Math.abs(num(s.refundsFeeGross))), csvNum(-num(s.refundsFee)), csvNum(-Math.abs(num(s.refundsFeeGross)) - num(s.refundsFee)), cur].join(";"));
-  lines.push(["Justeringar och tvister", "", "", csvNum(num(s.adjustmentsGross)), csvNum(-num(s.adjustmentsFee)), csvNum(num(s.adjustmentsGross) - num(s.adjustmentsFee)), cur].join(";"));
-  lines.push(["Reserverade medel", "", "", csvNum(num(s.reservedFundsGross)), csvNum(-num(s.reservedFundsFee)), csvNum(num(s.reservedFundsGross) - num(s.reservedFundsFee)), cur].join(";"));
-  lines.push(["Summa avgifter", "", "", "", csvNum(-(num(s.chargesFee) + num(s.refundsFee) + num(s.adjustmentsFee) + num(s.reservedFundsFee))), "", cur].join(";"));
-  lines.push(["Utbetalt till bank (netto)", "", "", "", "", csvNum(num(payout.net)), cur].join(";"));
-  return "﻿" + lines.join("\r\n");
+  lines.push(row("Försäljning", csvNum(salesGross), csvNum(vatOf(salesGross)), csvNum(salesGross - vatOf(salesGross)), csvNum(-num(s.chargesFee)), csvNum(salesGross - num(s.chargesFee))));
+  lines.push(row("Återbetalningar", csvNum(refundsGross), csvNum(vatOf(refundsGross)), csvNum(refundsGross - vatOf(refundsGross)), csvNum(-num(s.refundsFee)), csvNum(refundsGross - num(s.refundsFee))));
+  lines.push(row("Justeringar och tvister", csvNum(num(s.adjustmentsGross)), "", "", csvNum(-num(s.adjustmentsFee)), csvNum(num(s.adjustmentsGross) - num(s.adjustmentsFee))));
+  lines.push(row("Reserverade medel", csvNum(num(s.reservedFundsGross)), "", "", csvNum(-num(s.reservedFundsFee)), csvNum(num(s.reservedFundsGross) - num(s.reservedFundsFee))));
+  lines.push(row(`Utgående moms ${rate} % (netto efter återbetalningar)`, "", csvNum(salesVat), "", "", ""));
+  lines.push(row("Summa Shopify-avgifter (utan moms)", "", "", "", csvNum(-fees), ""));
+  lines.push(row("Utbetalt till bank (netto)", "", "", "", "", csvNum(num(payout.net))));
+  return "\ufeff" + lines.join("\r\n");
 }
 
 async function fetchAllPayouts(graphql: GraphqlFn, max: number): Promise<{ nodes: PayoutNode[]; balance: { amount: string; currencyCode: string }[] }> {
@@ -272,9 +293,11 @@ export interface PendingBalance {
   balance: number;
   count: number;
   gross: number;
+  vat: number;
+  vatRate: number;
   fees: number;
   net: number;
-  transactions: { date: string; type: string; order: string | null; gross: number; fee: number; net: number; currency: string }[];
+  transactions: { date: string; type: string; order: string | null; gross: number; vat: number; fee: number; net: number; currency: string }[];
 }
 
 /** Money Shopify holds that is not part of any payout yet – what the next payout will contain. */
@@ -319,6 +342,8 @@ export async function syncShopifyPayouts(opts: { graphql?: GraphqlFn; maxPayouts
       balance: balance.reduce((sum, b) => sum + (parseFloat(b.amount) || 0), 0),
       count: pending.length,
       gross: pending.reduce((sum, t) => sum + num(t.amount), 0),
+      vat: Math.round(pending.reduce((sum, t) => sum + (VAT_TYPES.has(t.type) ? vatOf(num(t.amount)) : 0), 0) * 100) / 100,
+      vatRate: env.shopifyVatRate,
       fees: pending.reduce((sum, t) => sum + Math.abs(num(t.fee)), 0),
       net: pending.reduce((sum, t) => sum + num(t.net), 0),
       transactions: pending.map((t) => ({
@@ -326,6 +351,7 @@ export async function syncShopifyPayouts(opts: { graphql?: GraphqlFn; maxPayouts
         type: TYPE_LABELS[t.type] || t.type,
         order: t.associatedOrder?.name || null,
         gross: num(t.amount),
+        vat: VAT_TYPES.has(t.type) ? vatOf(num(t.amount)) : 0,
         fee: -Math.abs(num(t.fee)),
         net: num(t.net),
         currency: t.amount.currencyCode,

@@ -18,6 +18,7 @@ router.get("/shopify", (req: Request, res: Response) => {
     configured: isShopifyConfigured(),
     missing: missingShopifySettings(),
     pending: getPendingBalance(),
+    vatRate: env.shopifyVatRate,
     storeDomain: env.shopifyStoreDomain,
     syncStatus: getShopifySyncStatus(),
     ok: req.query.ok || null,

@@ -57,6 +57,8 @@ export const env = {
   shopifyClientSecret: (process.env.SHOPIFY_CLIENT_SECRET || "").trim(),
   shopifyAccessToken: (process.env.SHOPIFY_ACCESS_TOKEN || "").trim(),
   shopifyApiVersion: process.env.SHOPIFY_API_VERSION || "2026-07",
+  // All Shopify sales carry Swedish VAT at this rate; the VAT is derived from the gross amounts
+  shopifyVatRate: Number.isFinite(parseFloat(process.env.SHOPIFY_VAT_RATE || "")) ? parseFloat(process.env.SHOPIFY_VAT_RATE!) : 25,
 
   // Claude API (optional)
   claudeApiKey: process.env.CLAUDE_API_KEY || "",
