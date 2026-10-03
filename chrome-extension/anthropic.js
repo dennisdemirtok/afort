@@ -11,13 +11,16 @@
     const known = new Set(start.known || []);
     const orgs = await getJson("/api/organizations");
     let billed = 0;
+    let lastError = null;
     for (const org of orgs) {
       let invoices;
       try {
-        invoices = (await getJson(`/api/organizations/${org.uuid}/invoices?limit=100`)).invoices || [];
+        // The API accepts at most 99
+        invoices = (await getJson(`/api/organizations/${org.uuid}/invoices?limit=99`)).invoices || [];
         billed++;
-      } catch {
-        continue; // claude.ai organizations have no API billing
+      } catch (err) {
+        lastError = err.message;
+        continue; // claude.ai organizations have no API billing (403)
       }
       for (const inv of invoices) {
         const issued = (inv.effective_at || "").slice(0, 10);
@@ -32,7 +35,7 @@
         else summary.errors.push(`${inv.invoice_number}: ${result && result.error ? result.error : "AFORT svarade inte"}`);
       }
     }
-    if (billed === 0) summary.errors.push("Hittade ingen organisation med fakturor – är du inloggad i Claude Console?");
+    if (billed === 0) summary.errors.push(`Hittade ingen organisation med fakturor (${lastError || "inga organisationer"}) – är du inloggad i Claude Console?`);
   } catch (err) {
     summary.errors.push(err.message);
   }
@@ -40,7 +43,10 @@
 
   async function getJson(path) {
     const res = await fetch(path, { credentials: "include" });
-    if (!res.ok) throw new Error(`Claude Console svarade ${res.status}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(`Claude Console svarade ${res.status}${body && body.error && body.error.message ? `: ${body.error.message}` : ""}`);
+    }
     return res.json();
   }
 })();
