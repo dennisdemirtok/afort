@@ -66,6 +66,22 @@ export function getReceiptByMessageId(messageId: string): Receipt | undefined {
   return getDb().prepare("SELECT * FROM receipts WHERE gmail_message_id = ?").get(messageId) as Receipt | undefined;
 }
 
+export function findReceiptByReference(source: string, reference: string): Receipt | undefined {
+  return getDb().prepare("SELECT * FROM receipts WHERE source = ? AND reference = ? ORDER BY received_at DESC LIMIT 1").get(source, reference) as Receipt | undefined;
+}
+
+/** References from a source whose PDF is stored or that were deleted – the Chrome extension skips these. */
+export function storedDocumentReferences(source: string): string[] {
+  const db = getDb();
+  const stored = (db.prepare(
+    "SELECT reference FROM receipts WHERE source = ? AND reference IS NOT NULL AND file_kind = 'pdf'"
+  ).all(source) as { reference: string }[]).map((r) => r.reference);
+  const prefix = `doc:${source}:`;
+  const deleted = (db.prepare("SELECT gmail_message_id AS key FROM deleted_messages WHERE substr(gmail_message_id, 1, ?) = ?")
+    .all(prefix.length, prefix) as { key: string }[]).map((r) => r.key.slice(prefix.length));
+  return [...new Set([...stored, ...deleted])];
+}
+
 export function listReceipts(filters: ReceiptFilters = {}, limit = 500): Receipt[] {
   const w = where(filters);
   return getDb().prepare(`SELECT * FROM receipts ${w.sql} ORDER BY received_at DESC LIMIT ?`).all(...w.params, limit) as Receipt[];
@@ -96,7 +112,13 @@ export function setReceiptStatusBulk(ids: string[], status: "new" | "booked"): n
   return n;
 }
 
-/** Removes receipts and remembers the mails so they are never imported again. */
+// Deleted documents from a vendor portal are remembered next to deleted mails, so the
+// Chrome extension does not upload them again
+function deletedDocumentKey(source: string, reference: string): string {
+  return `doc:${source}:${reference}`;
+}
+
+/** Removes receipts and remembers the mails (and invoice numbers) so they are never imported again. */
 export function deleteReceipts(ids: string[]): number {
   const db = getDb();
   const rows = getReceiptsByIds(ids);
@@ -105,10 +127,15 @@ export function deleteReceipts(ids: string[]): number {
   db.transaction(() => {
     for (const r of rows) {
       if (r.gmail_message_id) forget.run(r.gmail_message_id);
+      if (r.source && r.reference) forget.run(deletedDocumentKey(r.source, r.reference));
       del.run(r.id);
     }
   })();
   return rows.length;
+}
+
+export function isDocumentDeleted(source: string, reference: string): boolean {
+  return !!getDb().prepare("SELECT 1 FROM deleted_messages WHERE gmail_message_id = ?").get(deletedDocumentKey(source, reference));
 }
 
 export function listReceiptSources(): string[] {

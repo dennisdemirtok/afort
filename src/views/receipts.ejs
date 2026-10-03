@@ -16,11 +16,14 @@
 <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
   <div>
     <h1 class="page-title">Kvitton</h1>
-    <p class="page-subtitle">Kortköp – Distribold, Google, Meta – hämtas automatiskt från Gmail tillsammans med fakturorna.</p>
+    <p class="page-subtitle">Kortköp – Distribold, Google, Meta – hämtas automatiskt från Gmail tillsammans med fakturorna. Google Ads-fakturor hämtas av AFORT-tillägget i Chrome.</p>
   </div>
   <div class="flex flex-wrap gap-2">
     <button type="button" id="poll-button" class="btn btn-secondary" onclick="pollNow(this)">
       <span class="icon">sync</span><span data-label>Hämta nya nu</span>
+    </button>
+    <button type="button" class="btn btn-secondary" aria-controls="upload-card" onclick="document.getElementById('upload-card').classList.toggle('hidden')">
+      <span class="icon">upload_file</span>Ladda upp kvitton
     </button>
     <a href="/receipts/export.csv<%= query(filters) %>" class="btn btn-secondary" title="Exporterar de kvitton som visas med nuvarande filter">
       <span class="icon">download</span>Exportera CSV
@@ -28,7 +31,27 @@
   </div>
 </div>
 
-<%- include('partials/flash') %>
+<form id="upload-card" method="POST" action="/receipts/upload" enctype="multipart/form-data" class="card mb-6 hidden p-6">
+  <h2 class="section-title mb-2"><span class="icon text-primary">upload_file</span>Ladda upp kvitton som PDF</h2>
+  <p class="mb-4 text-sm text-ink-muted">För kvitton som inte kommer med mail, t.ex. Meta-kvitton som laddats ner under Fakturering och betalningar. Datum, belopp och fakturanummer läses ur PDF:en, och samma fakturanummer laddas inte in två gånger.</p>
+  <div class="grid gap-4 sm:grid-cols-3">
+    <div>
+      <label class="label" for="upload-source">Källa</label>
+      <input class="input" type="text" id="upload-source" name="source" list="upload-sources" required placeholder="Meta Ads" value="<%= filters.source || '' %>"/>
+      <datalist id="upload-sources">
+        <% Array.from(new Set(['Meta Ads', 'Google Ads'].concat(sources))).forEach(function (s) { %><option value="<%= s %>"></option><% }); %>
+      </datalist>
+    </div>
+    <div class="sm:col-span-2">
+      <label class="label" for="upload-pdfs">PDF:er (en eller flera)</label>
+      <input type="file" name="pdfs" id="upload-pdfs" accept="application/pdf,.pdf" multiple required
+             class="input cursor-pointer p-1.5 text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary-soft file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"/>
+    </div>
+  </div>
+  <div class="mt-4 flex justify-end">
+    <button type="submit" class="btn btn-primary"><span class="icon">upload_file</span>Ladda upp</button>
+  </div>
+</form>
 
 <% if (ruleCount === 0 && counts.total === 0) { %>
   <div class="flash flash-info mb-6"><span class="icon">info</span><span>Inga kvittoavsändare är inlagda. <% if (isAdmin) { %><a href="/settings" class="font-semibold underline">Lägg till dem under Inställningar</a>.<% } else { %>Be administratören lägga till dem under Inställningar.<% } %></span></div>

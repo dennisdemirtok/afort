@@ -3,6 +3,7 @@ import pdfParse from "pdf-parse";
 export interface ParsedInvoice {
   vendorName: string | null;
   invoiceNumber: string | null;
+  issueDate: string | null;
   amount: number | null;
   currency: string | null;
   dueDate: string | null;
@@ -19,6 +20,7 @@ export async function parseInvoicePdf(pdfBuffer: Buffer): Promise<ParsedInvoice>
   return {
     vendorName: extractVendorName(text),
     invoiceNumber: extractInvoiceNumber(text),
+    issueDate: extractIssueDate(text),
     amount: extractAmount(text),
     currency: extractCurrency(text),
     dueDate: extractDueDate(text),
@@ -45,6 +47,8 @@ function extractAmount(text: string): number | null {
   }
 
   const patterns = [
+    // Meta ads receipts: "Paid\nSEK20.00" (currency before the amount)
+    /\bPaid\s*\n\s*(?:SEK|EUR|USD|DKK|GBP|€|\$|£)\s?([\d,.]*\d[.,]\d{2})/,
     // Google invoices: "Totalt i EUR" with the value on the next line: "16,20 €"
     /Totalt\s+i\s+(?:EUR|SEK|USD|DKK|GBP)\s*\n\s*([\d\s.,]*\d[.,]\d{2})\s*(?:€|kr|\$|£)?/i,
     // Polish Fancywork: "DO ZAPŁATY: €52,48" or "POZOSTAŁO DO ZAPŁATY: €52,48"
@@ -156,13 +160,37 @@ function extractInvoiceNumber(text: string): string | null {
     // Polish: "Nr: 8/4/2026/WDT/DTF"
     /Nr\s*:?\s*([\d/]+\/\w+(?:\/\w+)?)/i,
     // English: "Invoice No: INV-12345"
-    /(?:fakturanr|faktura\s*nr|fakturanummer|invoice\s*(?:no|number|#))\s*:?\s*([A-Z0-9/-]{2,30})/i,
+    // Meta ads: "Invoice no. FBADS-708-106565845"
+    /(?:fakturanr|faktura\s*nr|fakturanummer|invoice\s*(?:no\.?|number|#))\s*:?\s*([A-Z0-9/-]{2,30})/i,
   ];
   for (const p of patterns) {
     const m = text.match(p);
     if (m) return m[1];
   }
   return null;
+}
+
+const MONTHS = ["jan", "feb", "mar", "apr", "ma[jy]", "jun", "jul", "aug", "sep", "o[ck]t", "nov", "dec"];
+
+/** "27 Sep 2026", "30 sep. 2026", "2026-09-27", "27.09.2026" → "2026-09-27" */
+export function parseDateText(raw: string): string | null {
+  const iso = raw.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const numeric = raw.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
+  if (numeric) return `${numeric[3]}-${numeric[2].padStart(2, "0")}-${numeric[1].padStart(2, "0")}`;
+  const named = raw.match(/(\d{1,2})\s+([a-zåäö]+)\.?,?\s+(\d{4})/i);
+  if (!named) return null;
+  const month = MONTHS.findIndex((m) => new RegExp(`^${m}`, "i").test(named[2]));
+  return month < 0 ? null : `${named[3]}-${String(month + 1).padStart(2, "0")}-${named[1].padStart(2, "0")}`;
+}
+
+function extractIssueDate(text: string): string | null {
+  const DATE = "(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[./-]\\d{1,2}[./-]\\d{4}|\\d{1,2}\\s+[A-Za-zåäö]+\\.?,?\\s+\\d{4})";
+  const match =
+    // Meta ads: "Invoice/payment date\n27 Sep 2026, 07:31"
+    text.match(new RegExp(`Invoice\\/payment\\s+date\\s*\\n?\\s*${DATE}`, "i")) ||
+    text.match(new RegExp(`(?:invoice\\s*date|fakturadatum|date\\s*of\\s*issue|data\\s*wystawienia|rechnungsdatum)\\s*:?\\s*\\n?\\s*${DATE}`, "i"));
+  return match ? parseDateText(match[1]) : null;
 }
 
 function extractVendorName(text: string): string | null {
@@ -174,6 +202,9 @@ function extractVendorName(text: string): string | null {
 function extractCurrency(text: string): string | null {
   // Check for explicit currency markers
   if (/DO ZAPŁATY.*€/i.test(text) || /\bBrutto\s*\(EUR\)/i.test(text) || /\bEUR\b/.test(text)) return "EUR";
+  // Meta ads: "SEK20.00"
+  const prefixed = text.match(/\b(SEK|DKK|USD|GBP)(?=\d)/);
+  if (prefixed) return prefixed[1];
   if (/\bDKK\b/.test(text)) return "DKK";
   if (/\bUSD\b/.test(text)) return "USD";
   if (/\bSEK\b/.test(text)) return "SEK";

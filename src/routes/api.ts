@@ -14,10 +14,11 @@ import { listPaymentFiles, getPaymentFileById } from "../models/payment-file";
 import { getUnreadNotifications, getUnreadCount, markAllRead, markRead } from "../models/notification";
 import { generatePain001, validateForPayment } from "../services/pain001";
 import { pollGmail, getPollStatus } from "../services/gmail";
-import { listReceipts } from "../models/receipt";
+import { listReceipts, storedDocumentReferences } from "../models/receipt";
+import { importReceiptPdf } from "../services/receipt-documents";
 import { listPayouts } from "../models/shopify";
 import { syncShopifyPayouts, getShopifySyncStatus } from "../services/shopify";
-import { receiptFiltersFromQuery } from "./receipts";
+import { receiptFiltersFromQuery, pdfUpload } from "./receipts";
 import { requireAdmin } from "../middleware/auth";
 import { filtersFromQuery, invoicesToCsv } from "./shared";
 
@@ -137,6 +138,35 @@ router.get("/reprocess", (_req: Request, res: Response) => {
 
 router.get("/receipts", (req: Request, res: Response) => {
   res.json(listReceipts(receiptFiltersFromQuery(req.query as Record<string, unknown>), 5000));
+});
+
+// ---- Documents fetched from vendor portals (the AFORT Chrome extension) ----
+
+const REFERENCE = /^[\w/.-]{3,40}$/;
+
+/** Invoice numbers whose PDF AFORT already has, so the extension only downloads new ones. */
+router.get("/receipt-documents", (req: Request, res: Response) => {
+  const source = typeof req.query.source === "string" ? req.query.source.trim() : "";
+  if (!source) return res.status(400).json({ error: "source required" });
+  res.json({ source, references: storedDocumentReferences(source) });
+});
+
+/** multipart/form-data: file (PDF), source ("Google Ads"), reference (invoice number), issued_at (YYYY-MM-DD, optional) */
+router.post("/receipt-documents", pdfUpload.single("file"), async (req: Request, res: Response) => {
+  const source = String(req.body.source || "").trim();
+  const reference = String(req.body.reference || "").trim();
+  const issuedRaw = String(req.body.issued_at || "").trim();
+  if (!source || source.length > 60) return res.status(400).json({ error: "source required" });
+  if (!REFERENCE.test(reference)) return res.status(400).json({ error: "reference required" });
+  if (!req.file) return res.status(400).json({ error: "file required" });
+  const issuedAt = /^\d{4}-\d{2}-\d{2}$/.test(issuedRaw) ? issuedRaw : null;
+  try {
+    const result = await importReceiptPdf({ source, reference, issuedAt, data: req.file.buffer, filename: req.file.originalname || `${reference}.pdf`, notify: true });
+    console.log(`[Receipts] ${source} ${reference}: ${result.status}`);
+    res.status(result.status === "created" ? 201 : 200).json({ status: result.status, receipt: result.receipt });
+  } catch (err: any) {
+    res.status(422).json({ error: err?.message || "PDF:en kunde inte sparas" });
+  }
 });
 
 router.get("/shopify/payouts", (_req: Request, res: Response) => {

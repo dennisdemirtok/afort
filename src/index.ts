@@ -9,7 +9,7 @@ import { requireAuth } from "./middleware/auth";
 import { pollGmail, isGmailConfigured } from "./services/gmail";
 import { ensureAdminExists } from "./models/user";
 import { repairInvoiceNumbersFromSubjects, repairInvalidIbans, removeProformaInvoices } from "./models/invoice";
-import { backfillIbansFromPdfs } from "./services/maintenance";
+import { backfillIbansFromPdfs, removeLinkOnlyReceipts } from "./services/maintenance";
 import { isShopifyConfigured, syncShopifyPayouts } from "./services/shopify";
 import { viewHelpers, buildIconFontUrl } from "./routes/shared";
 import apiRoutes from "./routes/api";
@@ -49,6 +49,8 @@ const clearedIbans = repairInvalidIbans();
 if (clearedIbans > 0) console.log(`[AFORT] Cleared ${clearedIbans} invalid IBANs`);
 const removedProformas = removeProformaInvoices();
 if (removedProformas > 0) console.log(`[AFORT] Removed ${removedProformas} pro forma invoices (numbers kept for bank matching)`);
+const removedNotices = removeLinkOnlyReceipts();
+if (removedNotices > 0) console.log(`[AFORT] Removed ${removedNotices} Google Ads mails that only linked to the invoice`);
 if (env.authToken === "change-me") {
   console.warn("[AFORT] AUTH_TOKEN is not set – the admin password is the insecure default.");
 }

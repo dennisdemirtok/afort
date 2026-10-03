@@ -101,6 +101,28 @@ export function matchReceiptRule(fromHeader: string, subject: string, rules: Sen
   );
 }
 
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>|<\/(?:p|div|tr|li|h\d)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&euro;/g, "€")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n+/g, "\n");
+}
+
+/**
+ * Google Ads on automatic payments mails "Ditt faktureringsdokument är klart" with the invoice
+ * number and a link to the portal – never the PDF itself.
+ */
+export function isLinkOnlyNotice(subject: string, text: string): boolean {
+  return /^\s*Google Ads\b/i.test(subject) && /faktureringsdokument|billing document/i.test(`${subject}\n${text}`);
+}
+
 /** "order number DISTRI-ORD08544", "Receipt #12345", "faktura 4567890123" */
 export function extractReferenceFromSubject(subject: string): string | null {
   const m =

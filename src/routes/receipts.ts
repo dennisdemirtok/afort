@@ -1,5 +1,6 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import archiver from "archiver";
+import multer from "multer";
 import fs from "fs";
 import path from "path";
 import {
@@ -17,8 +18,10 @@ import {
 } from "../models/receipt";
 import { listRules } from "../models/rule";
 import { requireAdmin, currentUser } from "../middleware/auth";
+import { attachReceiptPdf, importReceiptPdf, ImportedDocument } from "../services/receipt-documents";
 
 const router = Router();
+export const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 function flash(pathname: string, kind: "ok" | "err", message: string): string {
   return `${pathname}${pathname.includes("?") ? "&" : "?"}${kind}=${encodeURIComponent(message)}`;
@@ -123,6 +126,41 @@ router.post("/receipts/bulk", (req: Request, res: Response) => {
   res.status(400).json({ error: "Invalid action" });
 });
 
+/** PDFs downloaded from a vendor portal (Meta, Google Ads …) become receipts of their own. */
+router.post(
+  "/receipts/upload",
+  (req: Request, res: Response, next: NextFunction) =>
+    pdfUpload.array("pdfs", 50)(req, res, (err: unknown) => {
+      if (err) return res.redirect(flash("/receipts", "err", "En fil är för stor (max 15 MB) eller så valdes för många (max 50)."));
+      next();
+    }),
+  async (req: Request, res: Response) => {
+    const source = String(req.body.source || "").trim().slice(0, 60);
+    const files = (req.files as Express.Multer.File[] | undefined) || [];
+    if (!source) return res.redirect(flash("/receipts", "err", "Ange källa, t.ex. Meta Ads."));
+    if (files.length === 0) return res.redirect(flash("/receipts", "err", "Välj en eller flera PDF:er."));
+
+    const counts: Record<ImportedDocument["status"], number> = { created: 0, attached: 0, exists: 0, deleted: 0 };
+    const failed: string[] = [];
+    for (const file of files) {
+      try {
+        counts[(await importReceiptPdf({ source, data: file.buffer, filename: file.originalname })).status]++;
+      } catch {
+        failed.push(file.originalname);
+      }
+    }
+    const parts = [
+      counts.created && `${counts.created} kvitton skapade`,
+      counts.attached && `${counts.attached} kopplade till befintliga kvitton`,
+      counts.exists && `${counts.exists} fanns redan`,
+      counts.deleted && `${counts.deleted} har raderats tidigare och hoppades över`,
+    ].filter(Boolean);
+    const target = `/receipts${receiptQuery({ source })}`;
+    if (failed.length) return res.redirect(flash(target, "err", `${[...parts, `${failed.length} var inga läsbara PDF:er (${failed.join(", ")})`].join(", ")}.`));
+    res.redirect(flash(target, "ok", `${parts.join(", ")}.`));
+  }
+);
+
 router.get("/receipts/:id", (req: Request, res: Response) => {
   const receipt = getReceiptById(req.params.id);
   if (!receipt) return res.status(404).render("error", { title: "Kvittot finns inte", message: "Kvittot kan ha raderats." });
@@ -157,6 +195,28 @@ router.post("/receipts/:id/status", (req: Request, res: Response) => {
   if (!updateReceipt(req.params.id, { status })) return res.status(404).render("error", { title: "Kvittot finns inte", message: "" });
   res.redirect(flash(`/receipts/${req.params.id}`, "ok", status === "booked" ? "Kvittot är markerat som bokfört." : "Kvittot är återställt till nytt."));
 });
+
+/** The real document for a receipt whose mail only linked to it (Google Ads), or a PDF replacing the mail. */
+router.post(
+  "/receipts/:id/document",
+  (req: Request, res: Response, next: NextFunction) =>
+    pdfUpload.single("pdf")(req, res, (err: unknown) => {
+      if (err) return res.redirect(flash(`/receipts/${req.params.id}`, "err", "Filen är för stor (max 15 MB)."));
+      next();
+    }),
+  async (req: Request, res: Response) => {
+    const receipt = getReceiptById(req.params.id);
+    if (!receipt) return res.status(404).render("error", { title: "Kvittot finns inte", message: "Kvittot kan ha raderats." });
+    if (!req.file) return res.redirect(flash(`/receipts/${receipt.id}`, "err", "Välj en PDF först."));
+    try {
+      const updated = await attachReceiptPdf(receipt, req.file.buffer, req.file.originalname);
+      const amount = updated.amount != null && updated.amount !== receipt.amount ? ` Beloppet ${updated.amount.toFixed(2).replace(".", ",")} ${updated.currency || ""} lästes ur PDF:en.` : "";
+      res.redirect(flash(`/receipts/${receipt.id}`, "ok", `PDF:en är sparad.${amount}`.trim()));
+    } catch (err: any) {
+      res.redirect(flash(`/receipts/${receipt.id}`, "err", err?.message || "PDF:en kunde inte sparas."));
+    }
+  }
+);
 
 router.post("/receipts/:id/delete", requireAdmin, (req: Request, res: Response) => {
   deleteReceipts([req.params.id]);

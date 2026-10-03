@@ -28,6 +28,8 @@ import {
   extractInvoiceNumberFromSubject,
   extractAmountFromSubject,
   extractReferenceFromSubject,
+  htmlToText,
+  isLinkOnlyNotice,
   isReminder,
   SenderRule,
 } from "./invoice-extract";
@@ -165,20 +167,6 @@ function findBody(parts: gmail_v1.Schema$MessagePart[], mimeType: string): strin
   return null;
 }
 
-function htmlToText(html: string): string {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<br\s*\/?>|<\/(?:p|div|tr|li|h\d)>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&euro;/g, "€")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s*\n+/g, "\n");
-}
-
 type Outcome = "created" | "updated" | "skipped";
 
 interface Labels {
@@ -256,10 +244,17 @@ async function processReceipt(
       ignoredMessageIds.add(messageId);
       return "skipped";
     }
+    const bodyText = html ? htmlToText(html) : text || "";
+    // Google Ads only mails a link to the invoice – useless as a receipt. The PDF comes in
+    // through the Chrome extension (or an upload) instead.
+    if (isLinkOnlyNotice(subject, bodyText)) {
+      ignoredMessageIds.add(messageId);
+      return "skipped";
+    }
     const document = html || `<pre style="font-family:sans-serif;white-space:pre-wrap">${(text || "").replace(/</g, "&lt;")}</pre>`;
     filePath = saveFile(env.receiptsDir, messageId, "kvitto.html", document, receivedAt);
     fileKind = "html";
-    const found = amountFromText(html ? htmlToText(html) : text || "");
+    const found = amountFromText(bodyText);
     amount = found.amount;
     currency = found.currency;
   }
@@ -318,7 +313,7 @@ async function processMessage(messageId: string, mode: PollMode, labels: Labels)
 
   // A PDF we cannot read should still show up, so that it can be filled in by hand
   let parsed: ParsedInvoice = {
-    vendorName: null, invoiceNumber: null, amount: null, currency: null,
+    vendorName: null, invoiceNumber: null, issueDate: null, amount: null, currency: null,
     dueDate: null, ocr: null, bankgiro: null, plusgiro: null, iban: null,
   };
   try {

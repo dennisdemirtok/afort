@@ -24,8 +24,6 @@
   </div>
 </div>
 
-<%- include('partials/flash') %>
-
 <div class="grid grid-cols-1 gap-6 xl:grid-cols-5">
   <section class="card overflow-hidden xl:col-span-3" aria-label="Kvittot">
     <% if (!hasFile) { %>
@@ -71,9 +69,19 @@
           <textarea class="input" id="note" name="note" rows="3" placeholder="T.ex. vilket konto det betalades med"><%= receipt.note || '' %></textarea>
         </div>
         <div class="flex items-center justify-between pt-2">
-          <p class="text-xs text-ink-muted">Betalt med kort · mail från <%= receipt.sender %></p>
+          <p class="text-xs text-ink-muted">Betalt med kort<%= receipt.sender ? ' · mail från ' + receipt.sender : ' · uppladdad PDF' %></p>
           <button type="submit" class="btn btn-primary"><span class="icon">save</span>Spara</button>
         </div>
+      </form>
+    </section>
+    <section class="card p-6">
+      <h2 class="section-title mb-2"><span class="icon text-primary">picture_as_pdf</span><%= receipt.file_kind === 'pdf' ? 'Byt PDF' : 'Ersätt mailet med en PDF' %></h2>
+      <p class="mb-4 text-sm text-ink-muted"><%= receipt.file_kind === 'pdf' ? 'Laddar du upp en ny PDF ersätter den den som finns.' : 'Om bokföraren behöver kvittot som PDF (t.ex. med momsnummer) kan du ladda upp det här.' %> Belopp och referens läses ur PDF:en om du inte har ändrat dem för hand.</p>
+      <form method="POST" action="/receipts/<%= receipt.id %>/document" enctype="multipart/form-data" class="flex flex-col gap-3 sm:flex-row xl:flex-col 2xl:flex-row">
+        <label class="sr-only" for="pdf">PDF</label>
+        <input type="file" name="pdf" id="pdf" accept="application/pdf,.pdf" required
+               class="input min-w-0 flex-grow cursor-pointer p-1.5 text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary-soft file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"/>
+        <button type="submit" class="btn btn-primary"><span class="icon">upload_file</span>Ladda upp</button>
       </form>
     </section>
     <section class="card p-6 text-sm text-ink-muted">
