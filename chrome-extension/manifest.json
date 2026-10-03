@@ -1,26 +1,60 @@
 {
   "manifest_version": 3,
-  "name": "AFORT – Google Ads-fakturor",
-  "version": "1.0.0",
-  "description": "Hämtar Google Ads-fakturorna under Fakturering → Dokument och skickar dem till AFORT.",
-  "permissions": ["storage", "alarms"],
-  "host_permissions": ["https://ads.google.com/*", "https://payments.google.com/*"],
-  "optional_host_permissions": ["https://*/*", "http://localhost/*"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_title": "AFORT – Google Ads-fakturor" },
+  "name": "AFORT – fakturor från portaler",
+  "version": "1.1.0",
+  "description": "Hämtar fakturor som bara finns bakom inloggning (Google Ads, Claude Console) och skickar dem till AFORT.",
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://ads.google.com/*",
+    "https://payments.google.com/*",
+    "https://platform.claude.com/*",
+    "https://pay.stripe.com/*",
+    "https://files.stripe.com/*",
+    "https://stripe-upload-api.s3.us-west-1.amazonaws.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "AFORT – fakturor från portaler"
+  },
   "options_page": "options.html",
   "content_scripts": [
     {
-      "matches": ["https://payments.google.com/payments/u/*/documentcenter*"],
-      "js": ["page.js"],
+      "matches": [
+        "https://payments.google.com/payments/u/*/documentcenter*"
+      ],
+      "js": [
+        "page.js"
+      ],
       "world": "MAIN",
       "all_frames": true,
       "run_at": "document_start"
     },
     {
-      "matches": ["https://payments.google.com/payments/u/*/documentcenter*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://payments.google.com/payments/u/*/documentcenter*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "all_frames": true,
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://platform.claude.com/settings/billing*"
+      ],
+      "js": [
+        "anthropic.js"
+      ],
       "run_at": "document_idle"
     }
   ]

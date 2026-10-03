@@ -546,6 +546,7 @@ const CARD_MERCHANTS: Record<string, RegExp> = {
   "Meta Ads": /\bFACEBK\b|\bMETA\b/i,
   Distribold: /3D&I|DISTRIBOLD/i,
   Google: /GOOGLE\s*\*(?!ADS)|GSUITE|WORKSPACE/i,
+  Anthropic: /ANTHROPIC/i,
 };
 // Google Ads draws the card at a threshold during the month and the rest just after it ends;
 // together those charges add up to the monthly invoice

@@ -51,6 +51,8 @@ function extractAmount(text: string): number | null {
   const patterns = [
     // Meta ads receipts: "Paid\nSEK20.00" (currency before the amount)
     /\bPaid\s*\n\s*(?:SEK|EUR|USD|DKK|GBP|€|\$|£)\s?([\d,.]*\d[.,]\d{2})/,
+    // Stripe invoices (Anthropic): "Amount due$62.50 USD" – "Subtotal" comes first and excludes VAT
+    /\bAmount\s+(?:due|paid)\s*[$€£]([\d,]*\d\.\d{2})\s*(?:USD|EUR|GBP|SEK)\b/,
     // Google invoices: "Totalt i EUR" with the value on the next line: "16,20 €"
     /Totalt\s+i\s+(?:EUR|SEK|USD|DKK|GBP)\s*\n\s*([\d\s.,]*\d[.,]\d{2})\s*(?:€|kr|\$|£)?/i,
     // Polish Fancywork: "DO ZAPŁATY: €52,48" or "POZOSTAŁO DO ZAPŁATY: €52,48"
@@ -162,12 +164,14 @@ function extractInvoiceNumber(text: string): string | null {
     // Polish: "Nr: 8/4/2026/WDT/DTF"
     /Nr\s*:?\s*([\d/]+\/\w+(?:\/\w+)?)/i,
     // English: "Invoice No: INV-12345"
+    // Stripe invoices (Anthropic): "Invoice number9BF0758D-6501309" – the hyphen is extracted as NUL
+    /Invoice\s+number\s*([A-Z0-9]{8})[\s\u0000-](\d{4,})/,
     // Meta ads: "Invoice no. FBADS-708-106565845"
     /(?:fakturanr|faktura\s*nr|fakturanummer|invoice\s*(?:no\.?|number|#))\s*:?\s*([A-Z0-9/-]{2,30})/i,
   ];
   for (const p of patterns) {
     const m = text.match(p);
-    if (m) return m[1];
+    if (m) return m[2] ? `${m[1]}-${m[2]}` : m[1];
   }
   return null;
 }
@@ -186,14 +190,18 @@ export function parseDateText(raw: string): string | null {
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   const numeric = raw.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
   if (numeric) return `${numeric[3]}-${numeric[2].padStart(2, "0")}-${numeric[1].padStart(2, "0")}`;
-  const named = raw.match(/(\d{1,2})\s+([a-zåäö]+)\.?,?\s+(\d{4})/i);
-  if (!named) return null;
-  const month = MONTHS.findIndex((m) => new RegExp(`^${m}`, "i").test(named[2]));
-  return month < 0 ? null : `${named[3]}-${String(month + 1).padStart(2, "0")}-${named[1].padStart(2, "0")}`;
+  // "27 Sep 2026" or "September 21, 2026"
+  const dayFirst = raw.match(/(\d{1,2})\s+([a-zåäö]+)\.?,?\s+(\d{4})/i);
+  const monthFirst = raw.match(/([a-zåäö]+)\.?\s+(\d{1,2}),?\s+(\d{4})/i);
+  const parts = dayFirst ? [dayFirst[1], dayFirst[2], dayFirst[3]] : monthFirst ? [monthFirst[2], monthFirst[1], monthFirst[3]] : null;
+  if (!parts) return null;
+  const [day, name, year] = parts;
+  const month = MONTHS.findIndex((m) => new RegExp(`^${m}`, "i").test(name));
+  return month < 0 ? null : `${year}-${String(month + 1).padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
 function extractIssueDate(text: string): string | null {
-  const DATE = "(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[./-]\\d{1,2}[./-]\\d{4}|\\d{1,2}\\s+[A-Za-zåäö]+\\.?,?\\s+\\d{4})";
+  const DATE = "(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[./-]\\d{1,2}[./-]\\d{4}|\\d{1,2}\\s+[A-Za-zåäö]+\\.?,?\\s+\\d{4}|[A-Za-z]+\\s+\\d{1,2},\\s+\\d{4})";
   const match =
     // Meta ads: "Invoice/payment date\n27 Sep 2026, 07:31"
     text.match(new RegExp(`Invoice\\/payment\\s+date\\s*\\n?\\s*${DATE}`, "i")) ||

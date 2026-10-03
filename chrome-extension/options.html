@@ -2,18 +2,20 @@
 <html lang="sv">
 <head>
   <meta charset="utf-8">
-  <title>AFORT – Google Ads-fakturor</title>
+  <title>AFORT – fakturor från portaler</title>
   <style>
     :root { --ink: #0f172a; --muted: #64748b; --line: #e2e8f0; --primary: #2563eb; --ok: #15803d; --err: #b91c1c; }
     body { font: 14px/1.5 system-ui, -apple-system, sans-serif; color: var(--ink); background: #f8fafc; margin: 0; }
     main { max-width: 640px; margin: 32px auto; padding: 0 16px; }
     h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
     p.lead { color: var(--muted); margin: 0 0 24px; }
     section { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 16px; }
     label { display: block; font-weight: 600; margin: 12px 0 4px; }
-    label:first-child { margin-top: 0; }
-    input, textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
-    textarea { min-height: 72px; font-family: ui-monospace, monospace; font-size: 12px; }
+    label.check { display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; }
+    input[type=url], input[type=password], input[type=date], textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
+    input[type=date] { width: auto; }
+    textarea { min-height: 60px; font-family: ui-monospace, monospace; font-size: 12px; }
     .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
     .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
     button { font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
@@ -21,32 +23,46 @@
     button:disabled { opacity: .6; cursor: default; }
     #status { margin-top: 12px; min-height: 1.5em; }
     .ok { color: var(--ok); } .err { color: var(--err); }
-    #last ul { margin: 6px 0 0; padding-left: 18px; }
+    #lastBody ul { margin: 6px 0 0; padding-left: 18px; }
   </style>
 </head>
 <body>
 <main>
-  <h1>AFORT – Google Ads-fakturor</h1>
-  <p class="lead">Google Ads mailar bara en länk till fakturan. Tillägget öppnar Fakturering → Dokument i ett minimerat fönster de första dagarna i månaden, hämtar fakturor som AFORT saknar och laddar upp dem. Du behöver vara inloggad på Google Ads i Chrome.</p>
+  <h1>AFORT – fakturor från portaler</h1>
+  <p class="lead">Vissa leverantörer mailar inga fakturor utan har dem bara bakom inloggning. Tillägget öppnar deras fakturasidor i ett minimerat fönster med inloggningen som redan finns i Chrome, hämtar fakturor som AFORT saknar och laddar upp dem.</p>
 
   <section>
     <label for="afortUrl">AFORT-adress</label>
     <input id="afortUrl" type="url" placeholder="https://afort-production.up.railway.app">
     <label for="token">API-nyckel</label>
-    <input id="token" type="password" autocomplete="off" placeholder="AUTH_TOKEN eller en användares personliga nyckel">
+    <input id="token" type="password" autocomplete="off" placeholder="AUTH_TOKEN">
     <div class="hint">Samma värde som <code>AUTH_TOKEN</code> i Railway.</div>
-    <label for="pages">Dokument-sidor i Google Ads (en per rad)</label>
-    <textarea id="pages"></textarea>
-    <div class="hint">Öppna Google Ads → Fakturering → Dokument för kontot och kopiera adressen. <code>authuser=</code> med e-postadressen väljer rätt Google-konto.</div>
-    <div class="row">
-      <button id="save" class="primary">Spara</button>
-      <button id="test">Testa anslutningen</button>
-      <button id="run">Hämta fakturor nu</button>
-    </div>
-    <div id="status"></div>
   </section>
 
-  <section id="last"><strong>Senaste körning</strong><div id="lastBody" class="hint">Ingen körning än.</div></section>
+  <section>
+    <h2><label class="check"><input type="checkbox" id="google-ads-enabled"> Google Ads</label></h2>
+    <div class="hint">Fakturering → Dokument. Dag 1–15 varje månad tills förra månadens faktura är hämtad.</div>
+    <label for="google-ads-pages">Dokument-sidor (en per rad)</label>
+    <textarea id="google-ads-pages"></textarea>
+    <div class="hint">Öppna Google Ads → Fakturering → Dokument för kontot och kopiera adressen. <code>authuser=</code> med e-postadressen väljer Google-konto.</div>
+  </section>
+
+  <section>
+    <h2><label class="check"><input type="checkbox" id="anthropic-enabled"> Anthropic (Claude Console)</label></h2>
+    <div class="hint">Settings → Billing → Invoice history. En gång om dagen; en faktura kommer varje gång krediter köps. Du behöver vara inloggad på platform.claude.com.</div>
+    <label for="anthropic-from">Hämta fakturor från och med</label>
+    <input id="anthropic-from" type="date">
+    <div class="hint">Fakturor före det datumet betalades med ett annat kort och hämtas inte.</div>
+  </section>
+
+  <div class="row">
+    <button id="save" class="primary">Spara</button>
+    <button id="test">Testa anslutningen</button>
+    <button id="run">Hämta fakturor nu</button>
+  </div>
+  <div id="status"></div>
+
+  <section id="last" style="margin-top:16px"><strong>Senaste körning</strong><div id="lastBody" class="hint">Ingen körning än.</div></section>
 </main>
 <script src="options.js"></script>
 </body>

@@ -27,7 +27,7 @@
     return btoa(binary);
   }
 
-  const start = await chrome.runtime.sendMessage({ type: "frame-ready" });
+  const start = await chrome.runtime.sendMessage({ type: "frame-ready", portal: "google-ads" });
   if (!start || !start.run) return;
 
   const summary = { found: 0, uploaded: [], skipped: 0, latestIssued: null, errors: [] };

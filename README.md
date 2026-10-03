@@ -31,12 +31,15 @@ betalfiler (ISO 20022 pain.001) för Nordea.
 - **Ladda upp kvitton** (fliken *Kvitton*): PDF:er som inte kommer med mail, t.ex. Meta-kvitton nedladdade under
   Fakturering och betalningar → Betalningsaktivitet, blir kvitton med datum, belopp och fakturanummer ur PDF:en.
   Samma fakturanummer laddas inte in två gånger. Ett enskilt kvitto kan också få en PDF i stället för mailet.
-- **Chrome-tillägget** (`chrome-extension/`) öppnar Google Ads → Fakturering → Dokument i ett minimerat fönster
-  dag 1–15 varje månad tills förra månadens faktura är hämtad, med den inloggning som redan finns i Chrome.
-  Fakturor som AFORT saknar skickas till `POST /api/receipt-documents` och blir kvitton (källa *Google Ads*).
-  Installera: `chrome://extensions` → Utvecklarläge → *Läs in okomprimerat
-  tillägg* → välj mappen `chrome-extension`. Klicka på tilläggets ikon och fyll i AFORT-adressen, `AUTH_TOKEN`
-  och Dokument-sidan för varje Google Ads-konto (`authuser=` med e-postadressen väljer Google-konto).
+- **Chrome-tillägget** (`chrome-extension/`) hämtar fakturor som bara finns bakom inloggning, med den inloggning
+  som redan finns i Chrome, och skickar de som AFORT saknar till `POST /api/receipt-documents`:
+  - *Google Ads* – Fakturering → Dokument, dag 1–15 varje månad tills förra månadens faktura är hämtad.
+  - *Anthropic* – Claude Console → Billing (samma API som sidan använder, PDF via Stripe), en gång om dagen,
+    fakturor från och med ett valt datum.
+  En ny portal = en post i `PORTALS` i `background.js`, ett content script för portalens sidor och dess
+  behörigheter i `manifest.json`. Installera: `chrome://extensions` → Utvecklarläge → *Läs in okomprimerat
+  tillägg* → välj mappen `chrome-extension` (efter ändringar: klicka på ladda om-pilen). Klicka på tilläggets
+  ikon och fyll i AFORT-adressen och `AUTH_TOKEN`.
 - **Shopify** (fliken *Shopify*): utbetalningar från Shopify Payments hämtas via Admin API. Appen *AFORT*
   i Shopifys Dev Dashboard (organisation Transfercraft) är installerad i butiken med
   `read_shopify_payments_payouts` + `read_shopify_payments_accounts`. Sätt `SHOPIFY_STORE_DOMAIN`
