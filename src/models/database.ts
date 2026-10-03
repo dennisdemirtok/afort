@@ -174,6 +174,11 @@ function initSchema() {
   addColumnIfMissing("invoices", "paid_at", "TEXT");
   addColumnIfMissing("invoices", "manually_edited", "INTEGER DEFAULT 0");
   addColumnIfMissing("vendor_rules", "kind", "TEXT DEFAULT 'invoice'");
+  // Card receipts matched to the Nordea statement: what was actually drawn, in SEK
+  addColumnIfMissing("receipts", "payment_ref", "TEXT");
+  addColumnIfMissing("receipts", "bank_amount", "REAL");
+  addColumnIfMissing("receipts", "bank_date", "TEXT");
+  addColumnIfMissing("receipts", "bank_text", "TEXT");
 
   seedVendorRules();
   seedReceiptRules();

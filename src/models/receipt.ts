@@ -18,6 +18,12 @@ export interface Receipt {
   booked_at: string | null;
   note: string | null;
   manually_edited: number;
+  // Meta's "Reference number" – it is also on the card purchase ("FACEBK *KL2BT764J4")
+  payment_ref: string | null;
+  // The card purchase on the bank statement: amount drawn in SEK, booking date and text
+  bank_amount: number | null;
+  bank_date: string | null;
+  bank_text: string | null;
   created_at: string;
 }
 
@@ -28,7 +34,7 @@ export interface ReceiptFilters {
   q?: string;
 }
 
-const EDITABLE = ["source", "amount", "currency", "reference", "status", "booked_at", "note", "manually_edited", "file_path", "file_kind", "subject", "received_at"] as const;
+const EDITABLE = ["source", "amount", "currency", "reference", "status", "booked_at", "note", "manually_edited", "file_path", "file_kind", "subject", "received_at", "payment_ref", "bank_amount", "bank_date", "bank_text"] as const;
 
 function where(filters: ReceiptFilters): { sql: string; params: unknown[] } {
   const conditions: string[] = [];
@@ -48,12 +54,12 @@ export function createReceipt(data: Partial<Receipt>): Receipt {
   const db = getDb();
   const id = uuidv4();
   db.prepare(
-    `INSERT INTO receipts (id, gmail_message_id, source, sender, subject, received_at, amount, currency, reference, file_path, file_kind, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO receipts (id, gmail_message_id, source, sender, subject, received_at, amount, currency, reference, file_path, file_kind, status, payment_ref)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id, data.gmail_message_id || null, data.source || null, data.sender || null, data.subject || null,
     data.received_at || null, data.amount ?? null, data.currency || null, data.reference || null,
-    data.file_path || null, data.file_kind || null, data.status || "new"
+    data.file_path || null, data.file_kind || null, data.status || "new", data.payment_ref || null
   );
   return getReceiptById(id)!;
 }
@@ -80,6 +86,13 @@ export function storedDocumentReferences(source: string): string[] {
   const deleted = (db.prepare("SELECT gmail_message_id AS key FROM deleted_messages WHERE substr(gmail_message_id, 1, ?) = ?")
     .all(prefix.length, prefix) as { key: string }[]).map((r) => r.key.slice(prefix.length));
   return [...new Set([...stored, ...deleted])];
+}
+
+/** Receipts not yet tied to a card purchase on the bank statement, received in the given period. */
+export function receiptsWithoutBankMatch(from: string, to: string): Receipt[] {
+  return getDb().prepare(
+    "SELECT * FROM receipts WHERE bank_date IS NULL AND substr(received_at, 1, 10) BETWEEN ? AND ?"
+  ).all(from, to) as Receipt[];
 }
 
 export function listReceipts(filters: ReceiptFilters = {}, limit = 500): Receipt[] {

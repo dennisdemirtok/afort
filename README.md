@@ -46,6 +46,10 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   återbetalningar och avgifter plus en sammanställning. Hämtas varje morgon och på knapptryck.
 - **Bankutdrag**: ladda upp Nordeas CSV, granska träffarna och bocka av betalda fakturor. Inbetalningar
   som stämmer med en Shopify-utbetalning (belopp, några dagar efter) bockas av på samma sätt.
+  Kortköp ("Kortköp 260927 FACEBK *KL2BT764J4") kopplas till sina kvitton – Meta via referensnumret som står
+  både på kvittot och kortköpet, övriga via butik, datum och belopp (för EUR-kvitton en rimlig kurs). Beloppet
+  i SEK, bankdatumet och kursen sparas på kvittot och följer med i CSV-exporten. Kortköp utan kvitto listas
+  separat; Google Ads dras löpande och bokförs mot månadsfakturan, så de dragningarna kopplas inte.
 
 ## Roller
 

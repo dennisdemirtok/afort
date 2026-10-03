@@ -21,6 +21,7 @@ import {
   Invoice,
 } from "../models/invoice";
 import { listUnmatchedPayouts, markPayoutReceived, ShopifyPayout } from "../models/shopify";
+import { Receipt, receiptsWithoutBankMatch, updateReceipt } from "../models/receipt";
 import { listPaymentFiles, getPaymentFileById } from "../models/payment-file";
 import {
   createUserWithPassword,
@@ -538,6 +539,95 @@ export function matchPayoutRows(rows: BankRow[]): PayoutMatch[] {
   return matches;
 }
 
+// ---- Card purchases ↔ receipts ----
+
+// How a receipt source shows up as a card purchase: "Kortköp 260927 FACEBK *KL2BT764J4"
+const CARD_MERCHANTS: Record<string, RegExp> = {
+  "Meta Ads": /\bFACEBK\b|\bMETA\b/i,
+  Distribold: /3D&I|DISTRIBOLD/i,
+  Google: /GOOGLE\s*\*(?!ADS)|GSUITE|WORKSPACE/i,
+};
+// Google Ads draws the card at a threshold and invoices the month afterwards – the charges
+// never add up to one invoice, so they are not matched to it
+const GOOGLE_ADS_CHARGE = /GOOGLE\s*\*\s*ADS/i;
+// A foreign-currency receipt and the SEK amount drawn must give a plausible rate
+const SEK_RATE: Record<string, [number, number]> = { EUR: [9.5, 13.5], USD: [8, 13], GBP: [11, 16], DKK: [1.25, 1.85], NOK: [0.8, 1.25], PLN: [2.2, 3.3] };
+
+function isCardPurchase(row: BankRow): boolean {
+  return row.amount < 0 && /kortk[öo]p/i.test(`${row.name} ${row.message}`);
+}
+
+/** "Kortköp 260927 …" → "2026-09-27"; otherwise the booking date */
+function purchaseDate(row: BankRow): string {
+  const m = row.name.match(/kortk[öo]p\s+(\d{2})(\d{2})(\d{2})\b/i);
+  return m ? `20${m[1]}-${m[2]}-${m[3]}` : row.date;
+}
+
+interface ReceiptMatch {
+  row: BankRow;
+  receipt: Receipt;
+  sek: number;
+  rate: number | null;
+  exact: boolean;
+  warnings: string[];
+}
+
+interface CardRow extends BankRow {
+  googleAds: boolean;
+}
+
+export function matchReceiptRows(rows: BankRow[]): { matches: ReceiptMatch[]; unmatched: CardRow[] } {
+  // Reservations ("Reserverat") have no date and may still change – they are matched once booked
+  const cards = rows.filter((r) => isCardPurchase(r) && /^\d{4}-\d{2}-\d{2}$/.test(r.date));
+  if (cards.length === 0) return { matches: [], unmatched: [] };
+  const dates = cards.map(purchaseDate).sort();
+  const shift = (date: string, days: number) => new Date(new Date(date).getTime() + days * 86400000).toISOString().slice(0, 10);
+  const receipts = receiptsWithoutBankMatch(shift(dates[0], -7), shift(dates[dates.length - 1], 7)).filter((r) => r.source !== "Google Ads");
+  const dayDiff = (a: string, b: string) => Math.abs(Math.round((new Date(a).getTime() - new Date(b).getTime()) / 86400000));
+
+  const taken = new Set<string>();
+  const matches: ReceiptMatch[] = [];
+  const unmatched: CardRow[] = [];
+
+  for (const row of cards) {
+    const text = `${row.name} ${row.message}`;
+    const sek = Math.abs(row.amount);
+    const date = purchaseDate(row);
+    const free = receipts.filter((r) => !taken.has(r.id));
+
+    // Meta prints the receipt's reference number on the card purchase
+    let receipt = free.find((r) => r.payment_ref && text.toUpperCase().includes(r.payment_ref));
+    const exact = !!receipt;
+    let rate: number | null = null;
+
+    if (!receipt) {
+      const candidates = free
+        .filter((r) => {
+          const merchant = r.source ? CARD_MERCHANTS[r.source] : undefined;
+          if (!(merchant ? merchant.test(text) : namesOverlap(text, r.source))) return false;
+          if (dayDiff(date, (r.received_at || "").slice(0, 10)) > 5) return false;
+          if (r.amount == null) return false;
+          if (!r.currency || r.currency === "SEK") return Math.abs(r.amount - sek) < 0.5;
+          const band = SEK_RATE[r.currency];
+          return !!band && sek / r.amount >= band[0] && sek / r.amount <= band[1];
+        })
+        .sort((a, b) => dayDiff(date, (a.received_at || "").slice(0, 10)) - dayDiff(date, (b.received_at || "").slice(0, 10)));
+      receipt = candidates[0];
+    }
+
+    if (!receipt) {
+      unmatched.push({ ...row, googleAds: GOOGLE_ADS_CHARGE.test(text) });
+      continue;
+    }
+    taken.add(receipt.id);
+    const warnings: string[] = [];
+    if (receipt.currency && receipt.currency !== "SEK" && receipt.amount) rate = Math.round((sek / receipt.amount) * 10000) / 10000;
+    else if (receipt.amount != null && Math.abs(receipt.amount - sek) >= 0.5) warnings.push("Beloppet skiljer sig från kvittot");
+    matches.push({ row, receipt, sek, rate, exact, warnings });
+  }
+  return { matches, unmatched };
+}
+
 router.get("/bank-upload", (req: Request, res: Response) => {
   res.render("bank-upload", { result: null, err: req.query.err || null });
 });
@@ -549,6 +639,7 @@ router.post("/bank-upload", upload.single("csvfile"), (req: Request, res: Respon
     return res.redirect(flash("/bank-upload", "err", "Filen kunde inte läsas. Exportera kontoutdraget som CSV från Nordea (kolumnerna Datum och Belopp krävs)."));
   }
   const { matches, unmatched } = matchBankRows(rows);
+  const cards = matchReceiptRows(rows);
   res.render("bank-upload", {
     result: {
       // multer hands over the name as latin1; restore å/ä/ö
@@ -556,8 +647,11 @@ router.post("/bank-upload", upload.single("csvfile"), (req: Request, res: Respon
       payments: rows.filter((r) => r.amount < 0).length,
       toMark: matches.filter((m) => !m.alreadyPaid),
       alreadyPaid: matches.filter((m) => m.alreadyPaid),
-      unmatched,
+      // Card purchases are listed with the receipts instead
+      unmatched: unmatched.filter((r) => !isCardPurchase(r)),
       payouts: matchPayoutRows(rows),
+      receiptMatches: cards.matches,
+      cardsWithoutReceipt: cards.unmatched,
     },
     err: null,
   });
@@ -575,11 +669,19 @@ router.post("/bank-upload/apply", (req: Request, res: Response) => {
     const [id, date] = value.split("|");
     if (markPayoutReceived(id, /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : undefined)) payoutCount++;
   }
-  if (count === 0 && payoutCount === 0) return res.redirect(flash("/bank-upload", "err", "Inga betalningar var markerade."));
+  let receiptCount = 0;
+  for (const value of asArray(req.body.receipts)) {
+    const [id, date, amount, ...text] = value.split("|");
+    const sek = parseFloat(amount);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "") || isNaN(sek)) continue;
+    if (updateReceipt(id, { bank_date: date, bank_amount: sek, bank_text: text.join("|").slice(0, 120) || null })) receiptCount++;
+  }
+  if (count === 0 && payoutCount === 0 && receiptCount === 0) return res.redirect(flash("/bank-upload", "err", "Inga betalningar var markerade."));
   const parts = [];
   if (count) parts.push(`${count} fakturor markerade som betalda`);
   if (payoutCount) parts.push(`${payoutCount} Shopify-utbetalningar bockade av`);
-  res.redirect(flash(count ? "/invoices?status=paid" : "/shopify", "ok", parts.join(", ") + "."));
+  if (receiptCount) parts.push(`${receiptCount} kvitton fick beloppet i SEK från banken`);
+  res.redirect(flash(count ? "/invoices?status=paid" : payoutCount ? "/shopify" : "/receipts", "ok", parts.join(", ") + "."));
 });
 
 export default router;

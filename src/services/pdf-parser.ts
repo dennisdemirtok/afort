@@ -4,6 +4,7 @@ export interface ParsedInvoice {
   vendorName: string | null;
   invoiceNumber: string | null;
   issueDate: string | null;
+  paymentRef: string | null;
   amount: number | null;
   currency: string | null;
   dueDate: string | null;
@@ -21,6 +22,7 @@ export async function parseInvoicePdf(pdfBuffer: Buffer): Promise<ParsedInvoice>
     vendorName: extractVendorName(text),
     invoiceNumber: extractInvoiceNumber(text),
     issueDate: extractIssueDate(text),
+    paymentRef: paymentRefFromText(text),
     amount: extractAmount(text),
     currency: extractCurrency(text),
     dueDate: extractDueDate(text),
@@ -168,6 +170,12 @@ function extractInvoiceNumber(text: string): string | null {
     if (m) return m[1];
   }
   return null;
+}
+
+/** Meta ads: "Reference number: KL2BT764J4" – the same code is on the card purchase ("FACEBK *KL2BT764J4"). */
+export function paymentRefFromText(text: string): string | null {
+  const m = text.match(/Reference\s+number\s*:?\s*([A-Z0-9]{8,12})\b/i);
+  return m ? m[1].toUpperCase() : null;
 }
 
 const MONTHS = ["jan", "feb", "mar", "apr", "ma[jy]", "jun", "jul", "aug", "sep", "o[ck]t", "nov", "dec"];

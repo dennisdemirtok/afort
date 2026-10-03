@@ -1,6 +1,6 @@
 import fs from "fs";
-import { getDb } from "../models/database";
-import { parseInvoicePdf } from "./pdf-parser";
+import { getDb, getMeta, setMeta } from "../models/database";
+import { parseInvoicePdf, paymentRefFromText } from "./pdf-parser";
 import { htmlToText, isLinkOnlyNotice } from "./invoice-extract";
 
 /**
@@ -51,4 +51,32 @@ export function removeLinkOnlyReceipts(): number {
     removed++;
   }
   return removed;
+}
+
+/**
+ * Receipts stored before Meta's "Reference number" was read: reads it from the stored PDF or
+ * mail so the receipts can be matched to their card purchases. Runs once.
+ */
+export async function backfillPaymentRefs(): Promise<number> {
+  if (getMeta("payment_refs_backfilled")) return 0;
+  const db = getDb();
+  const rows = db.prepare(
+    "SELECT id, file_path, file_kind FROM receipts WHERE payment_ref IS NULL AND file_path IS NOT NULL"
+  ).all() as { id: string; file_path: string; file_kind: string }[];
+
+  const update = db.prepare("UPDATE receipts SET payment_ref = ? WHERE id = ? AND payment_ref IS NULL");
+  let filled = 0;
+  for (const row of rows) {
+    if (!fs.existsSync(row.file_path)) continue;
+    try {
+      const ref = row.file_kind === "pdf"
+        ? (await parseInvoicePdf(fs.readFileSync(row.file_path))).paymentRef
+        : paymentRefFromText(htmlToText(fs.readFileSync(row.file_path, "utf8")));
+      if (ref && update.run(ref, row.id).changes > 0) filled++;
+    } catch (err: any) {
+      console.error(`[AFORT] Could not read ${row.file_path}:`, err?.message || err);
+    }
+  }
+  setMeta("payment_refs_backfilled", new Date().toISOString());
+  return filled;
 }

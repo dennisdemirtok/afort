@@ -87,6 +87,14 @@
     <section class="card p-6 text-sm text-ink-muted">
       <p class="font-semibold text-ink"><%= receipt.subject %></p>
       <p class="mt-1">Mottaget <%= h.date(receipt.received_at) %><% if (receipt.booked_at) { %> · bokfört <%= receipt.booked_at %><% } %></p>
+      <% if (receipt.bank_date) { %>
+        <p class="mt-3 flex items-start gap-2 text-ink"><span class="icon icon-sm text-primary">credit_card</span>
+          <span>Dragit från kontot <%= receipt.bank_date %>: <span class="font-semibold tabular-nums"><%= h.money(receipt.bank_amount, 'SEK') %></span><% if (receipt.currency && receipt.currency !== 'SEK' && receipt.amount) { %> · kurs <%= String((receipt.bank_amount / receipt.amount).toFixed(4)).replace('.', ',') %><% } %>
+          <span class="block font-mono text-xs text-ink-muted"><%= receipt.bank_text %></span></span>
+        </p>
+      <% } else { %>
+        <p class="mt-3 text-xs">Inte kopplat till kontoutdraget än – ladda upp Nordea-filen under Bankutdrag.</p>
+      <% } %>
     </section>
   </div>
 </div>

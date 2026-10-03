@@ -19,7 +19,7 @@ import {
 import { listRules } from "../models/rule";
 import { createReceipt, getReceiptByMessageId } from "../models/receipt";
 import { createNotification } from "../models/notification";
-import { parseInvoicePdf, ParsedInvoice, amountFromText } from "./pdf-parser";
+import { parseInvoicePdf, ParsedInvoice, amountFromText, paymentRefFromText } from "./pdf-parser";
 import {
   matchRule,
   matchReceiptRule,
@@ -225,6 +225,7 @@ async function processReceipt(
   let amount: number | null = null;
   let currency: string | null = null;
   let reference = extractReferenceFromSubject(subject);
+  let paymentRef: string | null = null;
 
   if (attachment) {
     filePath = saveFile(env.receiptsDir, messageId, attachment.filename, attachment.data, receivedAt);
@@ -234,6 +235,7 @@ async function processReceipt(
       amount = parsed.amount;
       currency = parsed.currency;
       reference = reference || parsed.invoiceNumber;
+      paymentRef = parsed.paymentRef;
     } catch (err) {
       console.error(`[Gmail] Could not read receipt PDF in ${messageId} (${subject}):`, err);
     }
@@ -257,6 +259,7 @@ async function processReceipt(
     const found = amountFromText(bodyText);
     amount = found.amount;
     currency = found.currency;
+    paymentRef = paymentRefFromText(bodyText);
   }
 
   const receipt = createReceipt({
@@ -270,6 +273,7 @@ async function processReceipt(
     reference,
     file_path: filePath,
     file_kind: fileKind,
+    payment_ref: paymentRef,
   });
   await markProcessed(messageId, labelId);
 
@@ -313,7 +317,7 @@ async function processMessage(messageId: string, mode: PollMode, labels: Labels)
 
   // A PDF we cannot read should still show up, so that it can be filled in by hand
   let parsed: ParsedInvoice = {
-    vendorName: null, invoiceNumber: null, issueDate: null, amount: null, currency: null,
+    vendorName: null, invoiceNumber: null, issueDate: null, paymentRef: null, amount: null, currency: null,
     dueDate: null, ocr: null, bankgiro: null, plusgiro: null, iban: null,
   };
   try {

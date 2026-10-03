@@ -59,11 +59,13 @@ export function receiptsToCsv(receipts: Receipt[]): string {
     const s = v == null ? "" : String(v);
     return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const lines = ["Datum;Källa;Referens;Belopp;Valuta;Status;Bokförd;Ämne;Anteckning"];
+  const decimal = (n: number | null, digits = 2) => (n != null ? n.toFixed(digits).replace(".", ",") : "");
+  const lines = ["Datum;Källa;Referens;Belopp;Valuta;Belopp SEK (bank);Bankdatum;Kurs;Status;Bokförd;Ämne;Anteckning"];
   for (const r of receipts) {
+    const rate = r.bank_amount != null && r.amount && r.currency && r.currency !== "SEK" ? r.bank_amount / r.amount : null;
     lines.push([
       (r.received_at || "").slice(0, 10), r.source, r.reference,
-      r.amount != null ? r.amount.toFixed(2).replace(".", ",") : "", r.currency,
+      decimal(r.amount), r.currency, decimal(r.bank_amount), r.bank_date, decimal(rate, 4),
       r.status === "booked" ? "Bokförd" : "Ny", r.booked_at, r.subject, r.note,
     ].map(esc).join(";"));
   }

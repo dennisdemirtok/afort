@@ -3,7 +3,7 @@
 
 <div class="mb-8">
   <h1 class="page-title">Bankutdrag</h1>
-  <p class="page-subtitle">Ladda upp kontoutdraget från Nordea som CSV, så bockas betalda fakturor av med hjälp av fakturanumret i betalningens meddelande – och Shopify-utbetalningar med hjälp av beloppet.</p>
+  <p class="page-subtitle">Ladda upp kontoutdraget från Nordea som CSV, så bockas betalda fakturor av med hjälp av fakturanumret i betalningens meddelande, Shopify-utbetalningar med hjälp av beloppet – och kortköp kopplas till sina kvitton med beloppet i SEK.</p>
 </div>
 
 <form method="POST" action="/bank-upload" enctype="multipart/form-data" class="card mb-8 p-6">
@@ -23,10 +23,57 @@
     <%= result.toMark.length %> att bocka av ·
     <%= result.alreadyPaid.length %> redan betalda ·
     <%= result.unmatched.length %> utan matchning<% if (result.payouts.length) { %> ·
-    <%= result.payouts.length %> Shopify-utbetalningar<% } %>
+    <%= result.payouts.length %> Shopify-utbetalningar<% } %><% if (result.receiptMatches.length || result.cardsWithoutReceipt.length) { %> ·
+    <%= result.receiptMatches.length + result.cardsWithoutReceipt.length %> kortköp<% } %>
   </p>
 
   <form method="POST" action="/bank-upload/apply" id="apply-form">
+  <% if (result.receiptMatches.length) { %>
+    <div class="card mb-8 overflow-hidden">
+      <div class="flex items-center gap-2 border-b border-line px-6 py-4">
+        <span class="icon text-primary">credit_card</span>
+        <h2 class="section-title">Kortköp med kvitto</h2>
+        <span class="badge badge-neutral"><%= result.receiptMatches.length %></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse">
+          <thead class="border-b border-line bg-surface-low">
+            <tr>
+              <th class="th w-10"></th>
+              <th class="th">Kvitto</th>
+              <th class="th text-right">Kvittobelopp</th>
+              <th class="th text-right">Dragit från kontot</th>
+              <th class="th text-right">Kurs</th>
+              <th class="th">Bankdatum</th>
+              <th class="th">Kortköp</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-line">
+            <% result.receiptMatches.forEach(function (m) { %>
+              <tr class="hover:bg-surface-low">
+                <td class="td"><input type="checkbox" name="receipts" value="<%= m.receipt.id %>|<%= m.row.date %>|<%= m.sek.toFixed(2) %>|<%= m.row.name %>" <%= m.warnings.length ? '' : 'checked' %> class="match-check rounded border-slate-300 text-primary focus:ring-primary/30" aria-label="Spara bankbeloppet på kvittot <%= m.receipt.reference || m.receipt.id %>"/></td>
+                <td class="td">
+                  <a href="/receipts/<%= m.receipt.id %>" target="_blank" rel="noopener" class="font-semibold hover:text-primary"><%= m.receipt.source %></a>
+                  <span class="block font-mono text-xs text-ink-muted"><%= m.receipt.reference || h.date(m.receipt.received_at) %></span>
+                  <% if (!m.exact) { %><span class="badge badge-neutral mt-1">Matchad på butik, datum och belopp</span><% } %>
+                  <% m.warnings.forEach(function (w) { %><span class="badge badge-approved mt-1"><span class="icon icon-sm">warning</span><%= w %></span> <% }); %>
+                </td>
+                <td class="td whitespace-nowrap text-right tabular-nums"><%= h.money(m.receipt.amount, m.receipt.currency) %></td>
+                <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= h.money(m.sek, 'SEK') %></td>
+                <td class="td whitespace-nowrap text-right tabular-nums"><%= m.rate ? String(m.rate.toFixed(4)).replace('.', ',') : '–' %></td>
+                <td class="td whitespace-nowrap"><%= m.row.date %></td>
+                <td class="td font-mono text-xs text-ink-muted"><%= m.row.name %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface-low px-6 py-4">
+        <p class="text-sm text-ink-muted">Beloppet i SEK och bankdatumet sparas på kvittot och följer med i CSV-exporten.</p>
+        <button type="submit" class="btn btn-success"><span class="icon">credit_score</span>Spara på valda kvitton</button>
+      </div>
+    </div>
+  <% } %>
   <% if (result.payouts.length) { %>
     <div class="card mb-8 overflow-hidden">
       <div class="flex items-center gap-2 border-b border-line px-6 py-4">
@@ -116,7 +163,7 @@
         document.querySelectorAll('.match-check').forEach(function (c) { c.checked = checked; });
       });
     </script>
-  <% } else if (!result.payouts.length) { %>
+  <% } else if (!result.payouts.length && !result.receiptMatches.length) { %>
     <div class="card mb-8 px-6 py-10 text-center">
       <span class="icon icon-xl mb-3 block text-emerald-600/70">verified</span>
       <p class="font-display font-bold">Inget nytt att bocka av</p>
@@ -140,6 +187,34 @@
           </li>
         <% }); %>
       </ul>
+    </details>
+  <% } %>
+
+  <% if (result.cardsWithoutReceipt.length) { %>
+    <details class="card mb-8 overflow-hidden" open>
+      <summary class="flex cursor-pointer select-none items-center gap-2 px-6 py-4 hover:bg-surface-low">
+        <span class="icon text-amber-600">receipt_long</span>
+        <span class="section-title">Kortköp utan kvitto i AFORT</span>
+        <span class="badge badge-neutral"><%= result.cardsWithoutReceipt.length %></span>
+      </summary>
+      <div class="overflow-x-auto border-t border-line">
+        <table class="w-full border-collapse">
+          <thead class="border-b border-line bg-surface-low">
+            <tr><th class="th">Bankdatum</th><th class="th">Kortköp</th><th class="th text-right">Belopp</th><th class="th"></th></tr>
+          </thead>
+          <tbody class="divide-y divide-line">
+            <% result.cardsWithoutReceipt.forEach(function (u) { %>
+              <tr>
+                <td class="td whitespace-nowrap text-ink-muted"><%= u.date %></td>
+                <td class="td font-mono text-xs"><%= u.name %></td>
+                <td class="td whitespace-nowrap text-right tabular-nums"><%= h.money(Math.abs(u.amount), u.currency) %></td>
+                <td class="td text-xs text-ink-muted"><%= u.googleAds ? 'Google Ads – dras löpande, bokförs mot månadsfakturan' : '' %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <p class="border-t border-line px-6 py-3 text-xs text-ink-muted">Kvittot har inte kommit in, eller kommer från en avsändare som inte hämtas. Lägg till avsändaren under Inställningar eller ladda upp kvittot under Kvitton. Reserverade köp tas med när de är bokförda.</p>
     </details>
   <% } %>
 

@@ -45,6 +45,7 @@ export async function attachReceiptPdf(receipt: Receipt, data: Buffer, filename:
     if (info.currency) patch.currency = info.currency;
   }
   if (!receipt.reference && info?.invoiceNumber) patch.reference = info.invoiceNumber;
+  if (!receipt.payment_ref && info?.paymentRef) patch.payment_ref = info.paymentRef;
 
   const updated = updateReceipt(receipt.id, patch)!;
   // The mail copy is no longer shown; the mail itself is still in Gmail

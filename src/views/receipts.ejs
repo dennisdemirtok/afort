@@ -114,7 +114,7 @@
               <span class="block max-w-xs truncate text-xs text-ink-muted"><%= r.subject %></span>
             </td>
             <td class="td whitespace-nowrap text-right font-semibold tabular-nums">
-              <% if (r.amount != null) { %><%= h.money(r.amount, r.currency) %><% } else { %><span class="badge badge-approved"><span class="icon icon-sm">edit</span>Saknar belopp</span><% } %>
+              <% if (r.amount != null) { %><%= h.money(r.amount, r.currency) %><% if (r.bank_amount != null && r.currency && r.currency !== 'SEK') { %><span class="block text-xs font-normal text-ink-muted"><%= h.money(r.bank_amount, 'SEK') %> från kontot</span><% } %><% } else { %><span class="badge badge-approved"><span class="icon icon-sm">edit</span>Saknar belopp</span><% } %>
             </td>
             <td class="td whitespace-nowrap">
               <span class="badge <%= r.status === 'booked' ? 'badge-paid' : 'badge-new' %>"><%= r.status === 'booked' ? 'Bokförd' : 'Ny' %></span>

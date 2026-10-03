@@ -9,7 +9,7 @@ import { requireAuth } from "./middleware/auth";
 import { pollGmail, isGmailConfigured } from "./services/gmail";
 import { ensureAdminExists } from "./models/user";
 import { repairInvoiceNumbersFromSubjects, repairInvalidIbans, removeProformaInvoices } from "./models/invoice";
-import { backfillIbansFromPdfs, removeLinkOnlyReceipts } from "./services/maintenance";
+import { backfillIbansFromPdfs, backfillPaymentRefs, removeLinkOnlyReceipts } from "./services/maintenance";
 import { isShopifyConfigured, syncShopifyPayouts } from "./services/shopify";
 import { viewHelpers, buildIconFontUrl } from "./routes/shared";
 import apiRoutes from "./routes/api";
@@ -104,6 +104,9 @@ app.listen(env.port, () => {
   backfillIbansFromPdfs()
     .then((n) => { if (n > 0) console.log(`[AFORT] Filled in IBAN on ${n} invoices from their PDFs`); })
     .catch((err) => console.error("[AFORT] IBAN backfill failed:", err));
+  backfillPaymentRefs()
+    .then((n) => { if (n > 0) console.log(`[AFORT] Read the payment reference of ${n} receipts`); })
+    .catch((err) => console.error("[AFORT] Payment reference backfill failed:", err));
 
   if (isShopifyConfigured()) {
     // Shopify pays out a few times a week; once a day is plenty, plus once shortly after start
