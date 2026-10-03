@@ -51,18 +51,18 @@
           <tbody class="divide-y divide-line">
             <% result.receiptMatches.forEach(function (m) { %>
               <tr class="hover:bg-surface-low">
-                <td class="td"><input type="checkbox" name="receipts" value="<%= m.receipt.id %>|<%= m.row.date %>|<%= m.sek.toFixed(2) %>|<%= m.row.name %>" <%= m.warnings.length ? '' : 'checked' %> class="match-check rounded border-slate-300 text-primary focus:ring-primary/30" aria-label="Spara bankbeloppet på kvittot <%= m.receipt.reference || m.receipt.id %>"/></td>
+                <td class="td"><input type="checkbox" name="receipts" value="<%= m.receipt.id %>|<%= m.date %>|<%= m.sek.toFixed(2) %>|<%= m.text %>" <%= m.warnings.length ? '' : 'checked' %> class="match-check rounded border-slate-300 text-primary focus:ring-primary/30" aria-label="Spara bankbeloppet på kvittot <%= m.receipt.reference || m.receipt.id %>"/></td>
                 <td class="td">
                   <a href="/receipts/<%= m.receipt.id %>" target="_blank" rel="noopener" class="font-semibold hover:text-primary"><%= m.receipt.source %></a>
                   <span class="block font-mono text-xs text-ink-muted"><%= m.receipt.reference || h.date(m.receipt.received_at) %></span>
-                  <% if (!m.exact) { %><span class="badge badge-neutral mt-1">Matchad på butik, datum och belopp</span><% } %>
+                  <% if (m.rows.length > 1) { %><span class="badge badge-neutral mt-1"><%= m.rows.length %> dragningar = fakturans belopp</span><% } else if (!m.exact) { %><span class="badge badge-neutral mt-1">Matchad på butik, datum och belopp</span><% } %>
                   <% m.warnings.forEach(function (w) { %><span class="badge badge-approved mt-1"><span class="icon icon-sm">warning</span><%= w %></span> <% }); %>
                 </td>
                 <td class="td whitespace-nowrap text-right tabular-nums"><%= h.money(m.receipt.amount, m.receipt.currency) %></td>
                 <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= h.money(m.sek, 'SEK') %></td>
                 <td class="td whitespace-nowrap text-right tabular-nums"><%= m.rate ? String(m.rate.toFixed(4)).replace('.', ',') : '–' %></td>
-                <td class="td whitespace-nowrap"><%= m.row.date %></td>
-                <td class="td font-mono text-xs text-ink-muted"><%= m.row.name %></td>
+                <td class="td whitespace-nowrap"><%= m.date %></td>
+                <td class="td font-mono text-xs text-ink-muted"><% m.rows.forEach(function (r) { %><span class="block"><%= r.name %><% if (m.rows.length > 1) { %> · <%= h.money(Math.abs(r.amount), r.currency) %><% } %></span><% }); %></td>
               </tr>
             <% }); %>
           </tbody>
@@ -208,7 +208,7 @@
                 <td class="td whitespace-nowrap text-ink-muted"><%= u.date %></td>
                 <td class="td font-mono text-xs"><%= u.name %></td>
                 <td class="td whitespace-nowrap text-right tabular-nums"><%= h.money(Math.abs(u.amount), u.currency) %></td>
-                <td class="td text-xs text-ink-muted"><%= u.googleAds ? 'Google Ads – dras löpande, bokförs mot månadsfakturan' : '' %></td>
+                <td class="td text-xs text-ink-muted"><%= u.googleAds ? 'Google Ads – kopplas till månadsfakturan när alla månadens dragningar finns i filen' : '' %></td>
               </tr>
             <% }); %>
           </tbody>

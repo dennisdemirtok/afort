@@ -547,8 +547,8 @@ const CARD_MERCHANTS: Record<string, RegExp> = {
   Distribold: /3D&I|DISTRIBOLD/i,
   Google: /GOOGLE\s*\*(?!ADS)|GSUITE|WORKSPACE/i,
 };
-// Google Ads draws the card at a threshold and invoices the month afterwards – the charges
-// never add up to one invoice, so they are not matched to it
+// Google Ads draws the card at a threshold during the month and the rest just after it ends;
+// together those charges add up to the monthly invoice
 const GOOGLE_ADS_CHARGE = /GOOGLE\s*\*\s*ADS/i;
 // A foreign-currency receipt and the SEK amount drawn must give a plausible rate
 const SEK_RATE: Record<string, [number, number]> = { EUR: [9.5, 13.5], USD: [8, 13], GBP: [11, 16], DKK: [1.25, 1.85], NOK: [0.8, 1.25], PLN: [2.2, 3.3] };
@@ -564,12 +564,30 @@ function purchaseDate(row: BankRow): string {
 }
 
 interface ReceiptMatch {
-  row: BankRow;
+  // One card purchase – or every Google Ads charge behind a monthly invoice
+  rows: BankRow[];
   receipt: Receipt;
   sek: number;
+  date: string;
+  text: string;
   rate: number | null;
   exact: boolean;
   warnings: string[];
+}
+
+/** Indexes of amounts (in öre) that add up to the target, or null. Small inputs only. */
+function subsetSum(amounts: number[], target: number): number[] | null {
+  if (amounts.length > 18) return null;
+  const pick: number[] = [];
+  const search = (i: number, left: number): boolean => {
+    if (left === 0) return true;
+    if (i >= amounts.length || left < 0) return false;
+    pick.push(i);
+    if (search(i + 1, left - amounts[i])) return true;
+    pick.pop();
+    return search(i + 1, left);
+  };
+  return search(0, target) ? pick : null;
 }
 
 interface CardRow extends BankRow {
@@ -582,7 +600,8 @@ export function matchReceiptRows(rows: BankRow[]): { matches: ReceiptMatch[]; un
   if (cards.length === 0) return { matches: [], unmatched: [] };
   const dates = cards.map(purchaseDate).sort();
   const shift = (date: string, days: number) => new Date(new Date(date).getTime() + days * 86400000).toISOString().slice(0, 10);
-  const receipts = receiptsWithoutBankMatch(shift(dates[0], -7), shift(dates[dates.length - 1], 7)).filter((r) => r.source !== "Google Ads");
+  const period = receiptsWithoutBankMatch(shift(dates[0], -10), shift(dates[dates.length - 1], 10));
+  const receipts = period.filter((r) => r.source !== "Google Ads");
   const dayDiff = (a: string, b: string) => Math.abs(Math.round((new Date(a).getTime() - new Date(b).getTime()) / 86400000));
 
   const taken = new Set<string>();
@@ -623,7 +642,32 @@ export function matchReceiptRows(rows: BankRow[]): { matches: ReceiptMatch[]; un
     const warnings: string[] = [];
     if (receipt.currency && receipt.currency !== "SEK" && receipt.amount) rate = Math.round((sek / receipt.amount) * 10000) / 10000;
     else if (receipt.amount != null && Math.abs(receipt.amount - sek) >= 0.5) warnings.push("Beloppet skiljer sig från kvittot");
-    matches.push({ row, receipt, sek, rate, exact, warnings });
+    matches.push({ rows: [row], receipt, sek, date: row.date, text: row.name, rate, exact, warnings });
+  }
+
+  // Google Ads: the charges from the first of the invoice's month until a few days after it
+  // that add up exactly to the invoice (100 + 500 + 634,08 = 1 234,08)
+  const googleInvoices = period
+    .filter((r) => r.source === "Google Ads" && r.amount != null && r.received_at)
+    .sort((a, b) => (a.received_at! < b.received_at! ? -1 : 1));
+  for (const invoice of googleInvoices) {
+    const issued = invoice.received_at!.slice(0, 10);
+    const pool = unmatched.filter((c) => c.googleAds && purchaseDate(c) >= `${issued.slice(0, 8)}01` && purchaseDate(c) <= shift(issued, 10));
+    const subset = subsetSum(pool.map((c) => Math.round(-c.amount * 100)), Math.round(invoice.amount! * 100));
+    if (!subset || subset.length === 0) continue;
+    const charges = subset.map((i) => pool[i]).sort((a, b) => (a.date < b.date ? -1 : 1));
+    for (const c of charges) unmatched.splice(unmatched.indexOf(c), 1);
+    const amounts = charges.map((c) => Math.abs(c.amount).toFixed(2).replace(".", ",")).join(" + ");
+    matches.push({
+      rows: charges,
+      receipt: invoice,
+      sek: invoice.amount!,
+      date: charges[charges.length - 1].date,
+      text: `${charges.length} kortköp GOOGLE *ADS ${charges[0].date}–${charges[charges.length - 1].date}: ${amounts}`,
+      rate: null,
+      exact: true,
+      warnings: [],
+    });
   }
   return { matches, unmatched };
 }

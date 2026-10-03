@@ -49,7 +49,8 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   Kortköp ("Kortköp 260927 FACEBK *KL2BT764J4") kopplas till sina kvitton – Meta via referensnumret som står
   både på kvittot och kortköpet, övriga via butik, datum och belopp (för EUR-kvitton en rimlig kurs). Beloppet
   i SEK, bankdatumet och kursen sparas på kvittot och följer med i CSV-exporten. Kortköp utan kvitto listas
-  separat; Google Ads dras löpande och bokförs mot månadsfakturan, så de dragningarna kopplas inte.
+  separat. Google Ads drar kortet löpande och resten efter månadsskiftet – de dragningar som tillsammans blir
+  exakt månadsfakturans belopp kopplas till fakturan (filen behöver täcka hela månaden plus några dagar).
 
 ## Roller
 
