@@ -189,7 +189,9 @@ function extractIssueDate(text: string): string | null {
   const match =
     // Meta ads: "Invoice/payment date\n27 Sep 2026, 07:31"
     text.match(new RegExp(`Invoice\\/payment\\s+date\\s*\\n?\\s*${DATE}`, "i")) ||
-    text.match(new RegExp(`(?:invoice\\s*date|fakturadatum|date\\s*of\\s*issue|data\\s*wystawienia|rechnungsdatum)\\s*:?\\s*\\n?\\s*${DATE}`, "i"));
+    text.match(new RegExp(`(?:invoice\\s*date|fakturadatum|date\\s*of\\s*issue|data\\s*wystawienia|rechnungsdatum)\\s*:?\\s*\\n?\\s*${DATE}`, "i")) ||
+    // Google: the values come before their labels – the first date after "Fakturanummer: 5708227824"
+    text.match(/(?:Fakturanummer|Invoice number):\s*\d+[\s\S]{0,400}?(\d{1,2}\s+[A-Za-zåäö]+\.?\s+\d{4})/i);
   return match ? parseDateText(match[1]) : null;
 }
 
