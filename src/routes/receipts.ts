@@ -19,6 +19,7 @@ import {
 import { listRules } from "../models/rule";
 import { requireAdmin, currentUser } from "../middleware/auth";
 import { attachReceiptPdf, importReceiptPdf, ImportedDocument } from "../services/receipt-documents";
+import { suggestVoucher } from "../services/voucher";
 
 const router = Router();
 export const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -163,11 +164,16 @@ router.post(
   }
 );
 
-router.get("/receipts/:id", (req: Request, res: Response) => {
+router.get("/receipts/:id", async (req: Request, res: Response) => {
   const receipt = getReceiptById(req.params.id);
   if (!receipt) return res.status(404).render("error", { title: "Kvittot finns inte", message: "Kvittot kan ha raderats." });
+  const voucher = await suggestVoucher(receipt).catch((err) => {
+    console.error(`[Receipts] Voucher suggestion failed for ${receipt.id}:`, err);
+    return null;
+  });
   res.render("receipt-detail", {
     receipt,
+    voucher,
     hasFile: !!(receipt.file_path && fs.existsSync(receipt.file_path)),
     isAdmin: currentUser(res)?.role === "admin",
     ok: req.query.ok || null,

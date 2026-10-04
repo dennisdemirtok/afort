@@ -25,7 +25,8 @@
 </div>
 
 <div class="grid grid-cols-1 gap-6 xl:grid-cols-5">
-  <section class="card overflow-hidden xl:col-span-3" aria-label="Kvittot">
+  <div class="space-y-6 xl:col-span-3">
+  <section class="card overflow-hidden" aria-label="Kvittot">
     <% if (!hasFile) { %>
       <div class="flex h-72 flex-col items-center justify-center px-6 text-center">
         <span class="icon icon-xl mb-3 text-ink-faint/60">scan_delete</span>
@@ -41,6 +42,61 @@
       <%- include('partials/pdf-viewer', { src: '/receipts/' + receipt.id + '/file', downloadHref: '/receipts/' + receipt.id + '/file?download=1' }) %>
     <% } %>
   </section>
+
+  <% if (voucher) {
+    var amount = function (n) { return n == null ? '' : n.toFixed(2).replace('.', ','); };
+    var sum = function (side) { return voucher.rows.reduce(function (s, r) { return s + (r.side === side ? r.amount || 0 : 0); }, 0); };
+    var tsv = voucher.rows.map(function (r) { return [r.account, r.name, r.side === 'debit' ? amount(r.amount) : '', r.side === 'credit' ? amount(r.amount) : ''].join('\t'); }).join('\n');
+  %>
+  <section class="card overflow-hidden" aria-label="Verifikationsförslag">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-4">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="icon text-primary">receipt_long</span>
+        <h2 class="section-title">Verifikationsförslag</h2>
+        <span class="badge badge-neutral"><%= voucher.treatment %></span>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" data-copy="<%= tsv %>"><span class="icon icon-sm">content_copy</span>Kopiera rader</button>
+    </div>
+    <div class="grid gap-4 border-b border-line px-6 py-4 text-sm sm:grid-cols-3">
+      <div>
+        <p class="label">Datum</p>
+        <button type="button" class="copy-cell font-mono" data-copy="<%= voucher.date %>" title="Klicka för att kopiera"><%= voucher.date %></button>
+      </div>
+      <div class="sm:col-span-2">
+        <p class="label">Verifikationstext</p>
+        <button type="button" class="copy-cell text-left" data-copy="<%= voucher.text %>" title="Klicka för att kopiera"><%= voucher.text %></button>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse text-sm">
+        <thead class="border-b border-line bg-surface-low">
+          <tr><th class="th w-24">Konto</th><th class="th">Benämning</th><th class="th w-32 text-right">Debet</th><th class="th w-32 text-right">Kredit</th></tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          <% voucher.rows.forEach(function (r) { %>
+            <tr>
+              <td class="td"><button type="button" class="copy-cell font-mono font-semibold" data-copy="<%= r.account %>" title="Klicka för att kopiera"><%= r.account %></button></td>
+              <td class="td text-ink-muted"><%= r.name %></td>
+              <% ['debit', 'credit'].forEach(function (side) { %>
+                <td class="td text-right tabular-nums"><% if (r.side === side && r.amount != null) { %><button type="button" class="copy-cell" data-copy="<%= amount(r.amount) %>" title="Klicka för att kopiera"><%= h.money(r.amount, 'SEK') %></button><% } else if (r.side === side) { %><span class="text-ink-faint" title="Beloppet i SEK saknas">?</span><% } %></td>
+              <% }); %>
+            </tr>
+          <% }); %>
+        </tbody>
+        <% if (voucher.complete) { %>
+        <tfoot class="border-t border-line bg-surface-low">
+          <tr><td class="td"></td><td class="td text-xs font-semibold text-ink-muted">Summa</td><td class="td text-right font-semibold tabular-nums"><%= h.money(sum('debit'), 'SEK') %></td><td class="td text-right font-semibold tabular-nums"><%= h.money(sum('credit'), 'SEK') %></td></tr>
+        </tfoot>
+        <% } %>
+      </table>
+    </div>
+    <div class="space-y-1 border-t border-line px-6 py-4 text-xs text-ink-muted">
+      <% voucher.notes.forEach(function (n) { %><p class="flex gap-1.5"><span class="icon icon-sm text-amber-600">info</span><span><%= n %></span></p><% }); %>
+      <p>Klicka på ett konto eller belopp för att kopiera det. Förslaget bygger på källan och vad kvittot säger om moms – stäm av kontona med bokföraren.</p>
+    </div>
+  </section>
+  <% } %>
+  </div>
 
   <div class="space-y-6 xl:col-span-2">
     <section class="card p-6">
@@ -98,4 +154,41 @@
     </section>
   </div>
 </div>
+<div id="copy-toast" class="pointer-events-none fixed bottom-6 left-1/2 z-50 hidden -translate-x-1/2 rounded-lg bg-ink px-3 py-2 text-sm text-white shadow-pop">Kopierat</div>
+<script>
+  (function () {
+    var toast = document.getElementById('copy-toast');
+    var timer;
+    function show(message) {
+      toast.textContent = message;
+      toast.classList.remove('hidden');
+      clearTimeout(timer);
+      timer = setTimeout(function () { toast.classList.add('hidden'); }, 1600);
+    }
+    // Older browsers and embedded views refuse the Clipboard API – fall back to a hidden textarea
+    function copyFallback(text) {
+      var area = document.createElement('textarea');
+      area.value = text;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(area);
+      return ok;
+    }
+    document.querySelectorAll('[data-copy]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var text = el.getAttribute('data-copy');
+        var label = 'Kopierat: ' + text.split('\n')[0].split('\t')[0] + (text.indexOf('\n') >= 0 ? ' …' : '');
+        var done = function () { show(label); };
+        var fallback = function () { show(copyFallback(text) ? label : 'Kunde inte kopiera – markera texten och tryck Cmd+C'); };
+        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
+        else fallback();
+      });
+    });
+  })();
+</script>
 <%- include('partials/shell-bottom') %>

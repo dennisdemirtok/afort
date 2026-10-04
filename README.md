@@ -47,6 +47,11 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   24-timmarstoken med client credentials när den behövs. All försäljning har 25 % moms (`SHOPIFY_VAT_RATE`),
   så momsen räknas fram ur bruttot och visas i fliken och i underlaget. Shopifys avgifter är utan moms. Varje utbetalning får en CSV med alla ordrar,
   återbetalningar och avgifter plus en sammanställning. Hämtas varje morgon och på knapptryck.
+- **Verifikationsförslag** (på varje kvitto): konton, debet och kredit att kopiera till Fortnox. Förslaget utgår från
+  källan (`src/services/voucher.ts`: Meta/Google Ads → 5910, Google Workspace/Anthropic → 6540, Distribold → 4515)
+  och vad kvittot säger om moms – omvänd skattskyldighet (4535/4598 + 2645/2614), utländsk säljare som debiterat
+  svensk moms (hela beloppet som kostnad) eller svensk moms 25 % (2641). Beloppet är det som drogs i SEK från
+  banken. Klicka på ett konto eller belopp för att kopiera det. Kontona ska stämmas av med bokföraren.
 - **Bankutdrag**: ladda upp Nordeas CSV, granska träffarna och bocka av betalda fakturor. Inbetalningar
   som stämmer med en Shopify-utbetalning (belopp, några dagar efter) bockas av på samma sätt.
   Kortköp ("Kortköp 260927 FACEBK *KL2BT764J4") kopplas till sina kvitton – Meta via referensnumret som står

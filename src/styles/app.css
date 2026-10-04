@@ -106,6 +106,7 @@
   .badge-paid { @apply bg-emerald-100 text-emerald-800; }
   .badge-overdue { @apply bg-red-100 text-red-700; }
   .badge-neutral { @apply bg-surface-mid text-ink-muted; }
+  .copy-cell { @apply -mx-1 cursor-copy rounded px-1 hover:bg-primary-soft hover:text-primary; }
 
   /* Sidebar */
   .nav-link {
