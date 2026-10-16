@@ -51,6 +51,8 @@ function extractAmount(text: string): number | null {
   const patterns = [
     // Meta ads receipts: "Paid\nSEK20.00" (currency before the amount)
     /\bPaid\s*\n\s*(?:SEK|EUR|USD|DKK|GBP|€|\$|£)\s?([\d,.]*\d[.,]\d{2})/,
+    // New Wave: "Fakt.belopp\n1.079,30 0,13- SEK 1.349,00" – before it come "Orderradstotal" and "Ordertotal" without VAT
+    /Fakt\.?\s*belopp[\s\S]{0,80}?\b(?:SEK|EUR)\s*([\d.]*\d,\d{2})/i,
     // Stripe invoices (Anthropic): "Amount due$62.50 USD" – "Subtotal" comes first and excludes VAT
     /\bAmount\s+(?:due|paid)\s*[$€£]([\d,]*\d\.\d{2})\s*(?:USD|EUR|GBP|SEK)\b/,
     // Google invoices: "Totalt i EUR" with the value on the next line: "16,20 €"
@@ -86,6 +88,10 @@ function extractAmount(text: string): number | null {
 }
 
 function extractDueDate(text: string): string | null {
+  // New Wave: "FF-datum\n26-11-14" (YY-MM-DD)
+  const ff = text.match(/FF-datum\s*:?\s*(\d{2})-(\d{2})-(\d{2})\b/i);
+  if (ff) return `20${ff[1]}-${ff[2]}-${ff[3]}`;
+
   const patterns = [
     // Polish Fancywork: "Termin płatności:\n7 dni (2026-04-15)" (may be split across lines)
     /Termin p[łl]atno[śs]ci\s*:?[\s\S]*?\((\d{4}-\d{2}-\d{2})\)/i,
