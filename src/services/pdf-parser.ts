@@ -65,6 +65,8 @@ function extractAmount(text: string): number | null {
     /(?:amount\s*paid|amount\s*charged|total\s*charged|paid\s*amount|betalt\s*belopp|debiterat\s*belopp|totalt\s*belopp|grand\s*total)\s*:?\s*(?:EUR|DKK|SEK|USD|GBP|€|\$|£)?\s*([\d\s,.]+\d{2})/i,
     // English: "Total Amount: 1,234.56 EUR/DKK", "Total: €52.48"
     /(?:total\s*amount|amount\s*due|total)\s*:?\s*(?:EUR|DKK|SEK|USD|GBP|€|\$|£)?\s*([\d\s,.]+\d{2})/i,
+    // Whole kronor: "ATT BETALA 1250,-" or "Att betala: 1 250:-"
+    /att\s+betala\s*:?\s*(?:SEK|kr)?\s*(\d[\d\s.]*?)\s*[,:]-/i,
     // Swedish: "Att betala: 12 345,67" or "Summa: 1 234,00 SEK"
     /(?:att\s+betala|total(?:t|belopp)?|summa|belopp)\s*:?\s*([\d\s]+[.,]\d{2})/i,
     // Generic: amount followed by currency at end of line
