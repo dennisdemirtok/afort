@@ -3,6 +3,7 @@
 <%
   var isAdmin = user.role === 'admin';
   var overdue = h.isOverdue(invoice);
+  var isCredit = invoice.amount != null && invoice.amount < 0;
   // The natural next step for each status
   var nextStep = {
     new: { status: 'approved', label: 'Godkänn', icon: 'task_alt', cls: 'btn-primary' },
@@ -26,6 +27,7 @@
       <h1 class="text-2xl font-extrabold tracking-tight"><%= invoice.vendor_name || 'Okänd leverantör' %></h1>
       <p class="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-ink-muted">
         <span class="font-mono"><%= invoice.invoice_number || 'Fakturanummer saknas' %></span>
+        <% if (isCredit) { %><span class="badge badge-exported"><span class="icon icon-sm">undo</span>Kreditnota</span><% } %>
         <span class="badge badge-<%= invoice.status %>"><%= h.statusLabel(invoice.status) %></span>
         <% if (overdue) { %><span class="badge badge-overdue"><span class="icon icon-sm">warning</span>Förfallen sedan <%= h.daysOverdue(invoice.due_date) %> dagar</span><% } %>
         <% if (invoice.status === 'paid' && invoice.paid_at) { %><span>Betald <%= invoice.paid_at %></span><% } %>
@@ -34,7 +36,9 @@
   </div>
 
   <div class="flex flex-wrap items-center gap-2">
-    <% if (nextStep) { %>
+    <% if (isCredit) { %>
+      <%# A credit note is never paid; it is settled together with its invoice %>
+    <% } else if (nextStep) { %>
       <form method="POST" action="/invoices/<%= invoice.id %>/status">
         <input type="hidden" name="status" value="<%= nextStep.status %>"/>
         <button type="submit" class="btn <%= nextStep.cls %>"><span class="icon"><%= nextStep.icon %></span><%= nextStep.label %></button>
@@ -63,6 +67,32 @@
       Det finns <%= duplicates.length === 1 ? 'en annan rad' : duplicates.length + ' andra rader' %> med samma fakturanummer från <%= invoice.vendor_name %>:
       <% duplicates.forEach(function (d, i) { %><a class="font-semibold underline" href="/invoices/<%= d.id %>"><%= h.date(d.received_at) %> (<%= h.statusLabel(d.status).toLowerCase() %>)</a><%= i < duplicates.length - 1 ? ', ' : '' %><% }); %>.
       Ofta är det en påminnelse eller ett vidarebefordrat mail.
+    </span>
+  </div>
+<% } %>
+
+<% if (isCredit) { %>
+  <div class="flash flash-info">
+    <span class="icon">undo</span>
+    <span>
+      Kreditnota – betalas inte.
+      <% if (credited) { %>
+        Dras av från faktura <a class="font-semibold underline" href="/invoices/<%= credited.id %>"><%= credited.invoice_number %></a> när den betalas.
+        <% if (credited.status === 'paid' || credited.status === 'exported') { %><strong>Fakturan är redan betald eller ligger i en betalfil – begär återbetalning eller kvittning.</strong><% } %>
+      <% } else if (invoice.credits_invoice_number) { %>
+        Gäller faktura <%= invoice.credits_invoice_number %>, som inte finns i AFORT.
+      <% } else { %>
+        <strong>Inte kopplad till någon faktura</strong> – fyll i vilken faktura den gäller nedan, annars dras den inte av vid betalning.
+      <% } %>
+    </span>
+  </div>
+<% } else if (credits.length) { %>
+  <div class="flash flash-info">
+    <span class="icon">undo</span>
+    <span>
+      Kreditnota<%= credits.length > 1 ? 'or' : '' %>:
+      <% credits.forEach(function (c, i) { %><a class="font-semibold underline" href="/invoices/<%= c.id %>"><%= c.invoice_number || 'utan nummer' %></a> (<%= h.money(c.amount, c.currency) %>)<%= i < credits.length - 1 ? ', ' : '' %><% }); %>.
+      <strong>Att betala: <%= h.money(payable, invoice.currency) %></strong> – det är det beloppet som går till betalfilen.
     </span>
   </div>
 <% } %>
@@ -112,6 +142,12 @@
             </select>
           </div>
         </div>
+        <% if (isCredit) { %>
+          <div>
+            <label class="label" for="credits_invoice_number">Krediterar faktura (fakturanummer)</label>
+            <input class="input font-mono" type="text" id="credits_invoice_number" name="credits_invoice_number" value="<%= invoice.credits_invoice_number || '' %>" placeholder="T.ex. 16620131"/>
+          </div>
+        <% } %>
         <div>
           <label class="label" for="status">Status</label>
           <select class="input" id="status" name="status">

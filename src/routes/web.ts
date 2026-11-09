@@ -17,6 +17,9 @@ import {
   findByVendorAndNumber,
   normalizeInvoiceNumber,
   findProformaRef,
+  creditsFor,
+  creditedInvoice,
+  payableAmount,
   STATUSES,
   Invoice,
 } from "../models/invoice";
@@ -132,7 +135,7 @@ router.get("/invoices", (req: Request, res: Response) => {
   const page = Math.min(pages, Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1));
 
   res.render("invoices", {
-    invoices: listInvoices(filters, { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
+    invoices: listInvoices(filters, { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }).map((inv) => ({ ...inv, payable: payableAmount(inv) })),
     filters,
     counts: statusCounts(filters),
     stats: getStats(),
@@ -187,6 +190,9 @@ router.get("/invoices/:id", (req: Request, res: Response) => {
   res.render("invoice-detail", {
     invoice,
     duplicates,
+    credits: creditsFor(invoice),
+    payable: payableAmount(invoice),
+    credited: creditedInvoice(invoice),
     hasPdf: !!invoice.pdf_path && fs.existsSync(invoice.pdf_path),
     ok: req.query.ok || null,
     err: req.query.err || null,
@@ -204,7 +210,7 @@ router.post("/invoices/:id", (req: Request, res: Response) => {
   };
 
   const data: Partial<Invoice> = { manually_edited: 1 };
-  for (const key of ["vendor_name", "invoice_number", "due_date", "ocr", "bankgiro", "plusgiro", "iban"] as const) {
+  for (const key of ["vendor_name", "invoice_number", "due_date", "ocr", "bankgiro", "plusgiro", "iban", "credits_invoice_number"] as const) {
     if (key in req.body) (data as any)[key] = text(key);
   }
   if ("amount" in req.body) {
@@ -258,7 +264,7 @@ router.get("/payment-files", (req: Request, res: Response) => {
 });
 
 router.get("/payment-files/create", (req: Request, res: Response) => {
-  const invoices = listInvoices({ status: "approved" }).map((inv) => ({ ...inv, blocker: paymentBlocker(inv) }));
+  const invoices = listInvoices({ status: "approved" }).map((inv) => ({ ...inv, blocker: paymentBlocker(inv), payable: payableAmount(inv), credits: creditsFor(inv) }));
   res.render("create-payment", {
     invoices,
     configured: !!env.debtorIban,
@@ -420,7 +426,8 @@ interface BankMatch {
 }
 
 export function matchBankRows(rows: BankRow[]): { matches: BankMatch[]; unmatched: BankRow[] } {
-  const invoices = (getDb().prepare("SELECT * FROM invoices WHERE invoice_number IS NOT NULL").all() as Invoice[]);
+  // Credit notes are never paid, so a bank row cannot belong to one
+  const invoices = (getDb().prepare("SELECT * FROM invoices WHERE invoice_number IS NOT NULL AND COALESCE(amount, 0) >= 0").all() as Invoice[]);
   const byNumber = new Map<string, Invoice[]>();
   for (const inv of invoices) {
     const key = normalizeInvoiceNumber(inv.invoice_number!);
@@ -497,7 +504,8 @@ export function matchBankRows(rows: BankRow[]): { matches: BankMatch[]; unmatche
     if (viaProforma) warnings.push(`Betalningen anger pro forma – matchad mot slutfakturan ${invoice.invoice_number}`);
     const nameOk = !row.name || namesOverlap(row.name, invoice.vendor_name);
     if (!nameOk) warnings.push(`Mottagaren "${row.name}" liknar inte leverantören`);
-    if (invoice.amount != null && invoice.currency === row.currency && Math.abs(invoice.amount - paid) > 1) {
+    const payable = payableAmount(invoice);
+    if (payable != null && invoice.currency === row.currency && Math.abs(payable - paid) > 1) {
       warnings.push("Beloppet skiljer sig från fakturan");
     }
     if (!exact && !viaProforma) warnings.push("Fakturanumret matchar bara delvis");

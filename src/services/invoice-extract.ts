@@ -11,7 +11,7 @@ export interface SenderRule {
 
 // A mail must look like it is about an invoice before we even consider it
 // ("fv" = Polish shorthand for faktura; "brak płatności", "zaległości", "wezwanie" are Polish reminder wordings)
-const INVOICE_KEYWORDS = /faktur|\bfv\b|invoice|rechnung|creditnote|kreditnota|pro\s*forma|bifogas|payment|zapłat|płatno|zaległ|wezwanie|należno|zahlung/i;
+const INVOICE_KEYWORDS = /faktur|\bfv\b|invoice|rechnung|credit\s*note|kreditnota|pro\s*forma|bifogas|payment|zapłat|płatno|zaległ|wezwanie|należno|zahlung/i;
 
 // Mail that asks for payment of something we should already have, rather than a new invoice.
 // Fancywork's staff send manual reminders with just "FV WDT <number>" as subject.
@@ -26,6 +26,8 @@ const INVOICE_NUMBER_PATTERNS: RegExp[] = [
   /^\s*FV\s+WDT\s+([\d/]+\/[A-Z]+(?:\/[A-Z]+)?)/i,
   // Blue Water Shipping: "Invoice/Creditnote 16276606 from Blue Water"
   /Invoice\/Creditnote\s+(\d+)/i,
+  // Blue Water credit notes: "Creditnote 16631296 from Blue Water", "Credit note 15579866 from …"
+  /(?:Credit\s*note|Kreditnota|Kreditfaktura)\s+(\d[\w/-]*)/i,
   // DTFtransfer: "Rechnung (Ref ZB/2026/03/614)", "Zahlungserinnerung (Ref ...)"
   /\(Ref\.?\s+([^)]+)\)/i,
   // inFakt (DTFtransfer, Helios): "Invoice 586/12/2025/ZB from ...", "Faktura 39/05/2021 od ..."
@@ -53,6 +55,19 @@ export function isReminder(subject: string): boolean {
   return REMINDER_KEYWORDS.test(subject);
 }
 
+/** "Creditnote 16631296 from …" – but not Blue Water's "Invoice/Creditnote 123", which is on every invoice. */
+export function isCreditNoteSubject(subject: string): boolean {
+  return /(?<!invoice\/)\bcredit\s*note\b|kreditnota|kreditfaktura/i.test(subject);
+}
+
+/** The invoice a credit note reduces, as named in its mail: "… for four bookings on invoice 16620131". */
+export function creditedInvoiceNumber(mailText: string, ownNumber: string | null): string | null {
+  for (const m of mailText.matchAll(/\b(?:invoice|faktura)\s+(?:no\.?\s+|number\s+|nr\.?\s+)?(\d{6,})\b/gi)) {
+    if (m[1] !== ownNumber) return m[1];
+  }
+  return null;
+}
+
 export function extractInvoiceNumberFromSubject(subject: string): string | null {
   for (const pattern of INVOICE_NUMBER_PATTERNS) {
     const match = subject.match(pattern);
@@ -71,21 +86,30 @@ export function displayName(fromHeader: string): string {
   return name || emailAddress(fromHeader);
 }
 
+function senderMatches(rule: SenderRule, address: string): boolean {
+  const wanted = rule.from_address.toLowerCase();
+  // "@example.com" matches every sender on that domain
+  return wanted.startsWith("@") ? address.endsWith(wanted) : address === wanted;
+}
+
 export function matchRule(fromHeader: string, subject: string, rules: SenderRule[]): SenderRule | null {
   if (!looksLikeInvoiceMail(subject)) return null;
   const address = emailAddress(fromHeader);
   const subjectLower = subject.toLowerCase();
   return (
     rules.find((rule) => {
-      const wanted = rule.from_address.toLowerCase();
-      // "@example.com" matches every sender on that domain
-      const senderMatches = wanted.startsWith("@") ? address.endsWith(wanted) : address === wanted;
-      // A subject filter ("Faktura") keeps order mail out, but must not hide the vendor's reminders
+      // A subject filter ("Faktura") keeps order mail out, but must not hide the vendor's reminders and credit notes
       const subjectMatches =
-        !rule.subject_contains || subjectLower.includes(rule.subject_contains.toLowerCase()) || isReminder(subject);
-      return senderMatches && subjectMatches;
+        !rule.subject_contains || subjectLower.includes(rule.subject_contains.toLowerCase()) || isReminder(subject) || isCreditNoteSubject(subject);
+      return senderMatches(rule, address) && subjectMatches;
     }) || null
   );
+}
+
+/** Ignores the subject: for a credit note sent as a reply in a thread ("RE: Fråga om fakturan"). */
+export function matchSenderRule(fromHeader: string, rules: SenderRule[]): SenderRule | null {
+  const address = emailAddress(fromHeader);
+  return rules.find((rule) => senderMatches(rule, address)) || null;
 }
 
 /** Receipt rules only look at the sender and an optional subject filter – a receipt rarely says "invoice". */
@@ -139,6 +163,11 @@ export function resolveVendorName(fromHeader: string, subject: string, rule: Sen
     if (/HELIOS/i.test(subject)) return "Helios Advertising";
     const sender = subject.match(/\b(?:from|od)\s+(.+?)\s+(?:to|do)\s+/i);
     if (sender) return sender[1].trim();
+  }
+  // Fortnox's invoice service mails for many suppliers: "Här kommer din faktura 51084913 från Fortnox AB"
+  if (emailAddress(fromHeader) === "noreply@fortnox.se") {
+    const supplier = subject.match(/Här kommer din faktura\s+\S+\s+från\s+(.+?)\s*$/i);
+    if (supplier) return supplier[1];
   }
   return rule?.vendor_name || displayName(fromHeader);
 }

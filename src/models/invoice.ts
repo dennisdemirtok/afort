@@ -25,6 +25,7 @@ export interface Invoice {
   payment_file_id: string | null;
   paid_at: string | null;
   manually_edited: number;
+  credits_invoice_number: string | null;
   created_at: string;
 }
 
@@ -105,8 +106,8 @@ export function createInvoice(data: Partial<Invoice>): Invoice {
   db.prepare(`
     INSERT INTO invoices (id, gmail_message_id, sender, subject, received_at, processed_at,
       vendor_name, invoice_number, amount, currency, due_date, ocr, bankgiro, plusgiro, iban,
-      pdf_path, status, payment_file_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      pdf_path, status, payment_file_id, credits_invoice_number)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, data.gmail_message_id || null, data.sender || null, data.subject || null,
     data.received_at || null, data.processed_at || now,
@@ -114,7 +115,7 @@ export function createInvoice(data: Partial<Invoice>): Invoice {
     data.amount ?? null, data.currency || "SEK",
     data.due_date || null, data.ocr || null, data.bankgiro || null,
     data.plusgiro || null, data.iban || null, data.pdf_path || null,
-    data.status || "new", data.payment_file_id || null
+    data.status || "new", data.payment_file_id || null, data.credits_invoice_number || null
   );
 
   return getInvoiceById(id)!;
@@ -174,7 +175,8 @@ export function getStats(): InvoiceStats {
   const t = today();
 
   const unpaid = db.prepare(
-    "SELECT currency, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total FROM invoices WHERE status != 'paid' GROUP BY currency ORDER BY total DESC"
+    // Credit notes reduce the total but are not bills to pay
+    "SELECT currency, SUM(CASE WHEN COALESCE(amount, 0) >= 0 THEN 1 ELSE 0 END) AS n, COALESCE(SUM(amount), 0) AS total FROM invoices WHERE status != 'paid' GROUP BY currency ORDER BY total DESC"
   ).all() as { currency: string; n: number; total: number }[];
 
   const overdue = db.prepare(
@@ -206,7 +208,7 @@ export function listVendors(): string[] {
 const EDITABLE_FIELDS = [
   "vendor_name", "invoice_number", "amount", "currency", "due_date",
   "ocr", "bankgiro", "plusgiro", "iban", "status", "payment_file_id",
-  "paid_at", "manually_edited", "pdf_path", "sender", "subject", "received_at",
+  "paid_at", "manually_edited", "pdf_path", "sender", "subject", "received_at", "credits_invoice_number",
 ] as const;
 
 export function updateInvoice(id: string, data: Partial<Invoice>): Invoice | undefined {
@@ -235,7 +237,43 @@ export function updateInvoice(id: string, data: Partial<Invoice>): Invoice | und
     ...keys.map((k) => patch[k]),
     id
   );
+
+  // A credit note is settled together with the invoice it reduces
+  const becamePaid = patch.status === "paid" && existing.status !== "paid";
+  const noLongerPaid = !!patch.status && patch.status !== "paid" && existing.status === "paid";
+  if ((becamePaid || noLongerPaid) && !isCreditNote(existing)) {
+    const settled = becamePaid ? { status: "paid", paid_at: patch.paid_at } : { status: "new", paid_at: null };
+    for (const credit of creditsFor(existing)) {
+      db.prepare("UPDATE invoices SET status = ?, paid_at = ? WHERE id = ?").run(settled.status, settled.paid_at, credit.id);
+    }
+  }
   return getInvoiceById(id);
+}
+
+export function isCreditNote(inv: Pick<Invoice, "amount">): boolean {
+  return inv.amount != null && inv.amount < 0;
+}
+
+/** Credit notes in the same currency that reduce this invoice. */
+export function creditsFor(inv: Invoice): Invoice[] {
+  if (!inv.vendor_name || !inv.invoice_number || isCreditNote(inv)) return [];
+  const rows = getDb().prepare(
+    "SELECT * FROM invoices WHERE vendor_name = ? AND credits_invoice_number = ? AND amount < 0 ORDER BY received_at"
+  ).all(inv.vendor_name, inv.invoice_number) as Invoice[];
+  return rows.filter((c) => c.currency === inv.currency);
+}
+
+/** What is left to pay once the invoice's credit notes are deducted. */
+export function payableAmount(inv: Invoice): number | null {
+  if (inv.amount == null) return null;
+  const net = creditsFor(inv).reduce((sum, c) => sum + (c.amount || 0), inv.amount);
+  return Math.round(net * 100) / 100;
+}
+
+/** The invoice a credit note reduces, when it is in AFORT. */
+export function creditedInvoice(credit: Invoice): Invoice | undefined {
+  if (!credit.vendor_name || !credit.credits_invoice_number) return undefined;
+  return findByVendorAndNumber(credit.vendor_name, credit.credits_invoice_number, credit.id).find((i) => !isCreditNote(i));
 }
 
 export function setStatusBulk(ids: string[], status: InvoiceStatus): number {

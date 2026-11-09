@@ -21,6 +21,10 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   status, betalmarkeringar eller fakturor som ändrats för hand.
 - **Pro forma** från Feelgood hämtas inte (slutfakturan FD … kommer efter leverans). Numret sparas så att
   en bankbetalning som anger pro forma-numret ändå matchas mot slutfakturan.
+- **Kreditnotor**: en PDF med rubriken "CREDIT NOTE"/"Kreditfaktura" eller ämnesraden "Creditnote 123" får negativt
+  belopp, ingen förfallodag och kan inte betalas. Från en känd avsändare plockas de upp även som svar i en tråd.
+  Fakturan de gäller läses ur mailet ("on invoice 16620131") och kan fyllas i på kreditnotan. Betalfilen betalar
+  fakturan minus kreditnotan, med båda numren i meddelandet, och kreditnotan bockas av när fakturan betalas.
 - **Kvitton** (fliken *Kvitton*): kortköp från Distribold, Google och Meta hämtas från samma Gmail.
   Finns en PDF sparas den, annars sparas själva mailet. Belopp och referens tolkas så gott det går och
   kan rättas för hand; bokföraren markerar kvittot som bokfört. Avsändare styrs under *Inställningar →

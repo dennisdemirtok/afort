@@ -2,12 +2,14 @@ import { create } from "xmlbuilder2";
 import fs from "fs";
 import path from "path";
 import { env } from "../config/env";
-import { Invoice } from "../models/invoice";
+import { Invoice, creditsFor, isCreditNote, payableAmount } from "../models/invoice";
 import { createPaymentFile } from "../models/payment-file";
 
 /** Why an invoice cannot be paid through a payment file, or null when it can. */
 export function paymentBlocker(inv: Invoice): string | null {
-  if (inv.amount == null || inv.amount <= 0) return "Belopp saknas";
+  if (isCreditNote(inv)) return "Kreditnota – betalas inte";
+  if (inv.amount == null || inv.amount === 0) return "Belopp saknas";
+  if ((payableAmount(inv) || 0) <= 0) return "Kreditnotan täcker hela beloppet";
   if (!inv.iban && !inv.bankgiro && !inv.plusgiro) return "Betalkonto saknas (IBAN, bankgiro eller plusgiro)";
   return null;
 }
@@ -29,7 +31,9 @@ export function validateForPayment(invoices: Invoice[]): string[] {
 
 export function generatePain001(invoices: Invoice[], executionDate: string) {
   const msgId = `BATCH-${executionDate}-${Date.now().toString(36)}`;
-  const totalAmount = invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+  // Credit notes linked to an invoice are deducted from the payment
+  const payable = new Map(invoices.map((inv) => [inv.id, payableAmount(inv) || 0]));
+  const totalAmount = invoices.reduce((sum, inv) => sum + payable.get(inv.id)!, 0);
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, "");
 
   const doc = create({ version: "1.0", encoding: "UTF-8" })
@@ -77,7 +81,7 @@ export function generatePain001(invoices: Invoice[], executionDate: string) {
 
     tx.ele("Amt")
       .ele("InstdAmt", { Ccy: inv.currency || "SEK" })
-      .txt((inv.amount || 0).toFixed(2));
+      .txt(payable.get(inv.id)!.toFixed(2));
 
     // Creditor account - bankgiro, plusgiro, or IBAN
     if (inv.iban) {
@@ -103,7 +107,9 @@ export function generatePain001(invoices: Invoice[], executionDate: string) {
         .ele("Tp").ele("CdOrPrtry").ele("Cd").txt("SCOR").up().up().up()
         .ele("Ref").txt(inv.ocr);
     } else if (inv.invoice_number) {
-      tx.ele("RmtInf").ele("Ustrd").txt(inv.invoice_number);
+      // The vendor needs to see why less than the invoice amount arrives
+      const credits = creditsFor(inv).map((c) => c.invoice_number).filter(Boolean);
+      tx.ele("RmtInf").ele("Ustrd").txt([inv.invoice_number, ...credits.map((n) => `Kredit ${n}`)].join(" "));
     }
   }
 

@@ -173,6 +173,8 @@ function initSchema() {
   addColumnIfMissing("users", "password_hash", "TEXT");
   addColumnIfMissing("invoices", "paid_at", "TEXT");
   addColumnIfMissing("invoices", "manually_edited", "INTEGER DEFAULT 0");
+  // A credit note (negative amount) points to the invoice it reduces
+  addColumnIfMissing("invoices", "credits_invoice_number", "TEXT");
   addColumnIfMissing("vendor_rules", "kind", "TEXT DEFAULT 'invoice'");
   // Card receipts matched to the Nordea statement: what was actually drawn, in SEK
   addColumnIfMissing("receipts", "payment_ref", "TEXT");

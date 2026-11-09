@@ -137,9 +137,11 @@
             </td>
             <td class="td whitespace-nowrap font-mono text-[13px] text-ink-muted">
               <% if (inv.invoice_number) { %><%= inv.invoice_number %><% } else { %><span class="badge badge-neutral font-sans">Saknas</span><% } %>
+              <% if (inv.amount != null && inv.amount < 0) { %><span class="badge badge-exported ml-1 font-sans">Kreditnota</span><% } %>
             </td>
             <td class="td whitespace-nowrap text-right font-semibold tabular-nums">
               <% if (inv.amount != null) { %><%= h.money(inv.amount) %> <span class="text-xs font-medium text-ink-muted"><%= inv.currency %></span><% } else { %><span class="badge badge-neutral">Saknas</span><% } %>
+              <% if (inv.payable != null && inv.payable !== inv.amount) { %><span class="block text-xs font-normal text-ink-muted">Att betala <%= h.money(inv.payable) %></span><% } %>
             </td>
             <td class="td whitespace-nowrap">
               <% if (overdue) { %>

@@ -42,10 +42,13 @@
           <tbody class="divide-y divide-line">
             <% invoices.forEach(function (inv) { %>
               <tr class="<%= inv.blocker ? 'bg-surface-low/60' : 'hover:bg-surface-low' %>">
-                <td class="td"><input type="checkbox" name="invoice_ids" value="<%= inv.id %>" data-currency="<%= inv.currency %>" data-amount="<%= inv.amount || 0 %>" class="pay-check rounded border-slate-300 text-primary focus:ring-primary/30" <%= inv.blocker ? 'disabled' : '' %> aria-label="Välj <%= inv.invoice_number || 'faktura' %>"/></td>
+                <td class="td"><input type="checkbox" name="invoice_ids" value="<%= inv.id %>" data-currency="<%= inv.currency %>" data-amount="<%= inv.payable || 0 %>" class="pay-check rounded border-slate-300 text-primary focus:ring-primary/30" <%= inv.blocker ? 'disabled' : '' %> aria-label="Välj <%= inv.invoice_number || 'faktura' %>"/></td>
                 <td class="td font-semibold"><a href="/invoices/<%= inv.id %>" class="hover:text-primary"><%= inv.vendor_name || 'Okänd' %></a></td>
                 <td class="td font-mono text-[13px] text-ink-muted"><%= inv.invoice_number || '–' %></td>
-                <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= h.money(inv.amount, inv.currency) %></td>
+                <td class="td whitespace-nowrap text-right font-semibold tabular-nums">
+                  <%= h.money(inv.payable, inv.currency) %>
+                  <% if (inv.credits.length) { %><span class="block text-xs font-normal text-ink-muted">Faktura <%= h.money(inv.amount, inv.currency) %>, kredit <%= inv.credits.map(function (c) { return c.invoice_number; }).join(', ') %></span><% } %>
+                </td>
                 <td class="td whitespace-nowrap <%= h.isOverdue(inv) ? 'font-medium text-red-700' : 'text-ink-muted' %>"><%= inv.due_date || '–' %></td>
                 <td class="td text-sm">
                   <% if (inv.blocker) { %>

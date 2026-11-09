@@ -12,6 +12,7 @@ import {
   findByVendorAndNumber,
   latestPaymentAccountForVendor,
   paymentAccount,
+  creditedInvoice,
   PROFORMA_SKIP_VENDORS,
   isProforma,
   rememberProforma,
@@ -23,6 +24,9 @@ import { parseInvoicePdf, ParsedInvoice, amountFromText, paymentRefFromText } fr
 import {
   matchRule,
   matchReceiptRule,
+  matchSenderRule,
+  creditedInvoiceNumber,
+  isCreditNoteSubject,
   resolveVendorName,
   displayName,
   extractInvoiceNumberFromSubject,
@@ -300,12 +304,18 @@ async function processMessage(messageId: string, mode: PollMode, labels: Labels)
     ? new Date(dateHeader)
     : new Date(Number(full.data.internalDate) || Date.now());
 
-  const rule = matchRule(from, subject, listRules("invoice"));
+  let rule = matchRule(from, subject, listRules("invoice"));
+  let onlyIfCreditNote = false;
   if (!rule) {
     const receiptRule = matchReceiptRule(from, subject, listRules("receipt"));
     if (receiptRule) return processReceipt(messageId, full.data, from, subject, receivedAt, receiptRule, mode, labels.receipts);
-    ignoredMessageIds.add(messageId);
-    return "skipped";
+    // A credit note can arrive as a reply in a thread ("RE: Fråga om fakturan"), whatever the subject says
+    rule = matchSenderRule(from, listRules("invoice"));
+    onlyIfCreditNote = true;
+    if (!rule) {
+      ignoredMessageIds.add(messageId);
+      return "skipped";
+    }
   }
   const labelId = labels.invoices;
 
@@ -317,7 +327,7 @@ async function processMessage(messageId: string, mode: PollMode, labels: Labels)
 
   // A PDF we cannot read should still show up, so that it can be filled in by hand
   let parsed: ParsedInvoice = {
-    vendorName: null, invoiceNumber: null, issueDate: null, paymentRef: null, amount: null, currency: null,
+    vendorName: null, invoiceNumber: null, issueDate: null, paymentRef: null, isCreditNote: false, amount: null, currency: null,
     dueDate: null, ocr: null, bankgiro: null, plusgiro: null, iban: null,
   };
   try {
@@ -326,12 +336,23 @@ async function processMessage(messageId: string, mode: PollMode, labels: Labels)
     console.error(`[Gmail] Could not read PDF in ${messageId} (${subject}):`, err);
   }
 
+  if (onlyIfCreditNote && !parsed.isCreditNote) {
+    ignoredMessageIds.add(messageId);
+    return "skipped";
+  }
+
   const vendorName = resolveVendorName(from, subject, rule);
   const subjectNumber = extractInvoiceNumberFromSubject(subject);
   const reminder = isReminder(subject);
-  // The subject line is more reliable than the PDF, which often yields customer numbers
-  const invoiceNumber = subjectNumber || parsed.invoiceNumber;
-  const amount = parsed.amount ?? extractAmountFromSubject(subject);
+  const creditNote = parsed.isCreditNote || isCreditNoteSubject(subject);
+  // The subject line is more reliable than the PDF, which often yields customer numbers –
+  // but in a reply about an invoice it names that invoice, not the attached credit note
+  const invoiceNumber = onlyIfCreditNote ? parsed.invoiceNumber || subjectNumber : subjectNumber || parsed.invoiceNumber;
+  const parsedAmount = parsed.amount ?? extractAmountFromSubject(subject);
+  const amount = creditNote && parsedAmount != null ? -Math.abs(parsedAmount) : parsedAmount;
+  const bodyParts = full.data.payload?.parts || (full.data.payload ? [full.data.payload] : []);
+  const bodyHtml = creditNote ? findBody(bodyParts, "text/html") : null;
+  const mailText = creditNote ? findBody(bodyParts, "text/plain") || (bodyHtml ? htmlToText(bodyHtml) : "") : "";
   let currency = parsed.currency || "SEK";
   if (EUR_VENDORS.includes(vendorName) && (!parsed.currency || parsed.currency === "PLN")) currency = "EUR";
 
@@ -343,7 +364,9 @@ async function processMessage(messageId: string, mode: PollMode, labels: Labels)
     invoice_number: invoiceNumber,
     amount,
     currency,
-    due_date: parsed.dueDate,
+    // A credit note's "due date" is not a bill coming due
+    due_date: creditNote ? null : parsed.dueDate,
+    credits_invoice_number: creditNote ? creditedInvoiceNumber(mailText, invoiceNumber) : null,
     ocr: parsed.ocr,
     bankgiro: parsed.bankgiro,
     plusgiro: parsed.plusgiro,
@@ -407,10 +430,21 @@ async function processMessage(messageId: string, mode: PollMode, labels: Labels)
     const amountText = amount != null ? `${amount.toFixed(2)} ${currency}` : "";
     createNotification(
       "new_invoice",
-      `Ny faktura från ${vendorName}`,
+      `${creditNote ? "Ny kreditnota" : "Ny faktura"} från ${vendorName}`,
       [invoiceNumber, amountText].filter(Boolean).join(" · ") || subject.substring(0, 60),
       `/invoices/${invoice.id}`
     );
+
+    // Already paid in full: the money has to come back or be set off against the next invoice
+    const credited = creditNote ? creditedInvoice(invoice) : undefined;
+    if (credited && (credited.status === "paid" || credited.status === "exported")) {
+      createNotification(
+        "warning",
+        `Kreditnota på redan betald faktura`,
+        `${vendorName} ${invoiceNumber || ""} krediterar ${credited.invoice_number}, som redan är betald eller ligger i en betalfil – begär återbetalning eller kvittning.`,
+        `/invoices/${invoice.id}`
+      );
+    }
 
     // Paying to an account the vendor never used before deserves a second look
     const account = paymentAccount(fields);

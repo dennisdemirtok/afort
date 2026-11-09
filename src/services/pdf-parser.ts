@@ -5,6 +5,7 @@ export interface ParsedInvoice {
   invoiceNumber: string | null;
   issueDate: string | null;
   paymentRef: string | null;
+  isCreditNote: boolean;
   amount: number | null;
   currency: string | null;
   dueDate: string | null;
@@ -23,6 +24,7 @@ export async function parseInvoicePdf(pdfBuffer: Buffer): Promise<ParsedInvoice>
     invoiceNumber: extractInvoiceNumber(text),
     issueDate: extractIssueDate(text),
     paymentRef: paymentRefFromText(text),
+    isCreditNote: isCreditNoteText(text),
     amount: extractAmount(text),
     currency: extractCurrency(text),
     dueDate: extractDueDate(text),
@@ -33,6 +35,11 @@ export async function parseInvoicePdf(pdfBuffer: Buffer): Promise<ParsedInvoice>
   };
 }
 
+/** A document headed "CREDIT NOTE" or "Kreditfaktura". Only a line of its own counts: terms and conditions mention credit notes too. */
+function isCreditNoteText(text: string): boolean {
+  return /^\s*(?:credit\s*note|kredit\s*nota|kreditfaktura)\s*:?\s*$/im.test(text);
+}
+
 /** Amount and currency out of any text – used for receipts that arrive as HTML mail. */
 export function amountFromText(text: string): { amount: number | null; currency: string | null } {
   return { amount: extractAmount(text), currency: extractCurrency(text) };
@@ -41,7 +48,8 @@ export function amountFromText(text: string): { amount: number | null; currency:
 function extractAmount(text: string): number | null {
   // BWS: "Amount\n3.070,96 SEK0,00 SEK0,00 SEK3.070,96 SEK" — last number on the line after "Amount"
   // The line after "Amount" has 4 SEK amounts concatenated, last one is the total
-  const bwsAmountMatch = text.match(/\bAmount\s*\n\s*([\d.,]+)\s*SEK[\d.,]*\s*SEK[\d.,]*\s*SEK([\d.,]+)\s*SEK/i);
+  // Credit notes have a minus sign: "Amount\n-992,36 SEK0,00 SEK0,00 SEK-992,36 SEK"
+  const bwsAmountMatch = text.match(/\bAmount\s*\n\s*-?([\d.,]+)\s*SEK-?[\d.,]*\s*SEK-?[\d.,]*\s*SEK-?([\d.,]+)\s*SEK/i);
   if (bwsAmountMatch) {
     const numStr = bwsAmountMatch[2].replace(/\./g, "").replace(",", ".");
     const val = parseFloat(numStr);
@@ -169,6 +177,8 @@ export function isValidIban(iban: string): boolean {
 
 function extractInvoiceNumber(text: string): string | null {
   const patterns = [
+    // Blue Water: the document number follows the account number, "Your Account No:\n181751\n16631296"
+    /Your Account No:\s*\n\s*\d+\s*\n\s*(\d{6,})/,
     // Polish: "Nr: 8/4/2026/WDT/DTF"
     /Nr\s*:?\s*([\d/]+\/\w+(?:\/\w+)?)/i,
     // English: "Invoice No: INV-12345"
