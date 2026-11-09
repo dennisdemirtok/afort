@@ -73,6 +73,8 @@ function extractAmount(text: string): number | null {
     /(?:amount\s*paid|amount\s*charged|total\s*charged|paid\s*amount|betalt\s*belopp|debiterat\s*belopp|totalt\s*belopp|grand\s*total)\s*:?\s*(?:EUR|DKK|SEK|USD|GBP|€|\$|£)?\s*([\d\s,.]+\d{2})/i,
     // English: "Total Amount: 1,234.56 EUR/DKK", "Total: €52.48"
     /(?:total\s*amount|amount\s*due|total)\s*:?\s*(?:EUR|DKK|SEK|USD|GBP|€|\$|£)?\s*([\d\s,.]+\d{2})/i,
+    // Fortnox: the payment slip's "Att betala:1 185,00 SEK" – the table above has "Belopp att betala\n0,00 …"
+    /Att betala:\s*([\d\s]+[.,]\d{2})\s*SEK/i,
     // Whole kronor: "ATT BETALA 1250,-" or "Att betala: 1 250:-"
     /att\s+betala\s*:?\s*(?:SEK|kr)?\s*(\d[\d\s.]*?)\s*[,:]-/i,
     // Swedish: "Att betala: 12 345,67" or "Summa: 1 234,00 SEK"
@@ -127,13 +129,13 @@ function extractDueDate(text: string): string | null {
 }
 
 function extractOcr(text: string): string | null {
-  const match = text.match(/(?:OCR|referens(?:nummer)?)\s*:?\s*(\d{5,25})/i);
+  const match = text.match(/(?:OCR(?:-?nummer)?|referens(?:nummer)?)\s*:?\s*(\d{5,25})/i);
   return match ? match[1] : null;
 }
 
 function extractBankgiro(text: string): string | null {
   const match =
-    text.match(/(?:bankgiro|bg)\s*:?\s*(\d{3,4}-?\d{4})\b/i) ||
+    text.match(/(?:bankgiro(?:nr|nummer)?|bg)\s*:?\s*(\d{3,4}-?\d{4})\b/i) ||
     // Blue Water: "55936546 (Bankgiro)"
     text.match(/\b(\d{3,4}-?\d{4})\s*\(Bankgiro\)/i);
   if (!match) return null;
