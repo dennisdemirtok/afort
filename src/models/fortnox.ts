@@ -15,20 +15,18 @@ export interface CustomerInvoice {
   // SEK per unit of the invoice's currency
   sek_rate: number;
   cancelled: number;
-  // 0 for a draft that has not been sent to the customer
-  sent: number;
   synced_at: string | null;
 }
 
 export function upsertCustomerInvoice(i: Omit<CustomerInvoice, "total_vat">): void {
   // The list from Fortnox has no VAT; it is fetched once per invoice and must survive a refresh
   getDb().prepare(
-    `INSERT INTO customer_invoices (document_number, customer_name, invoice_date, due_date, final_pay_date, total, balance, currency, sek_rate, cancelled, sent, synced_at)
-     VALUES (@document_number, @customer_name, @invoice_date, @due_date, @final_pay_date, @total, @balance, @currency, @sek_rate, @cancelled, @sent, @synced_at)
+    `INSERT INTO customer_invoices (document_number, customer_name, invoice_date, due_date, final_pay_date, total, balance, currency, sek_rate, cancelled, synced_at)
+     VALUES (@document_number, @customer_name, @invoice_date, @due_date, @final_pay_date, @total, @balance, @currency, @sek_rate, @cancelled, @synced_at)
      ON CONFLICT(document_number) DO UPDATE SET
        customer_name = excluded.customer_name, invoice_date = excluded.invoice_date, due_date = excluded.due_date,
        final_pay_date = excluded.final_pay_date, total = excluded.total, balance = excluded.balance, currency = excluded.currency,
-       sek_rate = excluded.sek_rate, cancelled = excluded.cancelled, sent = excluded.sent, synced_at = excluded.synced_at`
+       sek_rate = excluded.sek_rate, cancelled = excluded.cancelled, synced_at = excluded.synced_at`
   ).run(i);
 }
 

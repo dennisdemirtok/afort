@@ -149,7 +149,6 @@ export async function syncFortnoxInvoices(fetchFn: FetchFn = fetch, opts: { paus
         currency: inv.Currency || "SEK",
         sek_rate: rate && unit ? rate / unit : 1,
         cancelled: inv.Cancelled ? 1 : 0,
-        sent: inv.Sent === false ? 0 : 1,
         synced_at: syncedAt,
       });
     }

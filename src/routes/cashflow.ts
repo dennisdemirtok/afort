@@ -19,9 +19,10 @@ function flash(kind: "ok" | "err", message: string): string {
 }
 
 router.get("/cashflow", (req: Request, res: Response) => {
-  // Payments already on the statement are in the balance, whether or not they have been ticked off
+  // Payments already on the statement are in the balance, whether or not they have been ticked off.
+  // The invoice number decides, also when another payee was paid ("RAFFE ECOMMERCE" for Fancywork).
   const recent = bankRowsSince(addDays(today(), -90));
-  const invoiceIds = new Set(matchBankRows(recent).matches.filter((m) => !m.alreadyPaid && !m.risky).map((m) => m.invoice.id));
+  const invoiceIds = new Set(matchBankRows(recent).matches.filter((m) => !m.alreadyPaid && m.exact).map((m) => m.invoice.id));
   const payoutIds = new Set(matchPayoutRows(recent).map((m) => m.payout.id));
   res.render("cashflow", {
     overview: cashflowOverview({ invoiceIds, payoutIds }),

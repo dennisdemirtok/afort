@@ -144,8 +144,8 @@ export function listUnpaidInvoices(): Invoice[] {
   return getDb().prepare("SELECT * FROM invoices WHERE status != 'paid'").all() as Invoice[];
 }
 
-export function invoicesPaidBetween(from: string, to: string): Invoice[] {
-  return getDb().prepare("SELECT * FROM invoices WHERE status = 'paid' AND paid_at BETWEEN ? AND ?").all(from, to) as Invoice[];
+export function invoicesReceivedBetween(from: string, to: string): Invoice[] {
+  return getDb().prepare("SELECT * FROM invoices WHERE substr(received_at, 1, 10) BETWEEN ? AND ?").all(from, to) as Invoice[];
 }
 
 export function countInvoices(filters: InvoiceFilters = {}): number {

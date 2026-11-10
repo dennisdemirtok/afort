@@ -1,7 +1,7 @@
 import { env } from "../config/env";
 import { BankRow, balanceHistory, bankDataRange, bankRowsSince, latestBalances } from "../models/bank";
 import { customerInvoiceCount, customerInvoicesPaidBetween, listUnpaidCustomerInvoices } from "../models/fortnox";
-import { Invoice, invoicesPaidBetween, listUnpaidInvoices, payableAmount, today } from "../models/invoice";
+import { Invoice, invoicesReceivedBetween, listUnpaidInvoices, payableAmount, today } from "../models/invoice";
 import { Receipt, listReceipts } from "../models/receipt";
 import { ShopifyPayout, listPayouts } from "../models/shopify";
 import { getPendingBalance, vatOf } from "./shopify";
@@ -135,8 +135,7 @@ export interface VatData {
   today: string;
   payouts: ShopifyPayout[];
   pendingVat: number;
-  // Supplier invoices paid in the quarter, with the day they were paid
-  invoices: (Pick<Invoice, "amount" | "currency" | "vat_amount"> & { paid_at: string | null })[];
+  invoices: Pick<Invoice, "amount" | "currency" | "received_at" | "vat_amount">[];
   receipts: Receipt[];
   bankRows: BankRow[];
   bankRange: { from: string; to: string } | null;
@@ -163,7 +162,9 @@ export function calculateVatQuarter(q: Quarter, data: VatData): VatQuarter & { a
   let inputInvoices = 0;
   let assumedInvoices = 0;
   for (const inv of data.invoices) {
-    if (!within(inv.paid_at) || inv.amount == null) continue;
+    // By the invoice date: AFORT's paid dates are only bank dates for invoices ticked off from a
+    // statement, and suppliers are paid within weeks, so it is close to the cash method
+    if (!within(inv.received_at) || inv.amount == null) continue;
     // Foreign suppliers are reverse charge: the VAT goes in and out and nets to zero
     if (inv.currency !== "SEK") continue;
     if (inv.vat_amount != null) {
@@ -185,7 +186,7 @@ export function calculateVatQuarter(q: Quarter, data: VatData): VatQuarter & { a
   if (data.today <= q.end) status = "building";
   else if (paid) status = "paid";
   else if (data.today <= q.dueDate) status = "due";
-  else status = range && range.to >= q.dueDate ? "unpaid" : "past";
+  else status = range && range.from <= addDays(q.end, 1) && range.to >= q.dueDate ? "unpaid" : "past";
 
   const output = outputShopify + outputCustomers;
   const input = inputInvoices + inputReceipts;
@@ -339,7 +340,7 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
       today: now,
       payouts,
       pendingVat: pending?.vat || 0,
-      invoices: invoicesPaidBetween(q.start, q.end),
+      invoices: invoicesReceivedBetween(q.start, q.end),
       receipts,
       bankRows,
       bankRange,
@@ -392,7 +393,7 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
       label: `${c.customer_name || "Kund"}, faktura ${c.document_number}`,
       original: c.currency && c.currency !== "SEK" ? `${(c.balance || 0).toLocaleString("sv-SE", { minimumFractionDigits: 2 })} ${c.currency}` : null,
       href: null,
-      flag: !c.sent ? "Utkast, inte skickad" : overdue ? "Förfallen" : null,
+      flag: overdue ? "Förfallen" : null,
     });
   }
 
