@@ -46,16 +46,16 @@ export function amountFromText(text: string): { amount: number | null; currency:
 }
 
 function extractAmount(text: string): number | null {
-  // BWS: "Amount\n3.070,96 SEK0,00 SEK0,00 SEK3.070,96 SEK" — last number on the line after "Amount"
-  // The line after "Amount" has 4 SEK amounts concatenated, last one is the total
-  // Credit notes have a minus sign: "Amount\n-992,36 SEK0,00 SEK0,00 SEK-992,36 SEK"
-  const bwsAmountMatch = text.match(/\bAmount\s*\n\s*-?([\d.,]+)\s*SEK-?[\d.,]*\s*SEK-?[\d.,]*\s*SEK-?([\d.,]+)\s*SEK/i);
-  if (bwsAmountMatch) {
-    const numStr = bwsAmountMatch[2].replace(/\./g, "").replace(",", ".");
-    const val = parseFloat(numStr);
+  // BWS: the line after "Amount" ends with the total – "3.070,96 SEK0,00 SEK0,00 SEK3.070,96 SEK",
+  // three amounts on invoices with VAT ("221,50 SEK55,38 SEK276,88 SEK"), minus signs on credit notes
+  const bwsAmountLine = text.match(/\bAmount\s*\n\s*((?:-?[\d.,]+\s*SEK\s*){3,4})/i);
+  if (bwsAmountLine) {
+    const last = [...bwsAmountLine[1].matchAll(/([\d.,]+)\s*SEK/g)].pop()!;
+    const val = parseFloat(last[1].replace(/\./g, "").replace(",", "."));
     if (!isNaN(val) && val > 0) return val;
   }
 
+  // The amount groups below never span lines: "Total:\n1\n143,60" is a quantity and a price, not 1143,60
   const patterns = [
     // Meta ads receipts: "Paid\nSEK20.00" (currency before the amount)
     /\bPaid\s*\n\s*(?:SEK|EUR|USD|DKK|GBP|€|\$|£)\s?([\d,.]*\d[.,]\d{2})/,
@@ -70,17 +70,17 @@ function extractAmount(text: string): number | null {
     // Polish: "Brutto (EUR)\n52,48" — total at bottom
     /Brutto\s*\(EUR\)\s*\n?\s*([\d\s]+[.,]\d{2})/i,
     // Receipts: "Amount paid: €123.45", "Betalt belopp: 123,45 kr", "Total charged $12.00"
-    /(?:amount\s*paid|amount\s*charged|total\s*charged|paid\s*amount|betalt\s*belopp|debiterat\s*belopp|totalt\s*belopp|grand\s*total)\s*:?\s*(?:EUR|DKK|SEK|USD|GBP|€|\$|£)?\s*([\d\s,.]+\d{2})/i,
+    /(?:amount\s*paid|amount\s*charged|total\s*charged|paid\s*amount|betalt\s*belopp|debiterat\s*belopp|totalt\s*belopp|grand\s*total)\s*:?\s*(?:EUR|DKK|SEK|USD|GBP|€|\$|£)?\s*([\d \t\u00a0,.]+\d{2})/i,
     // English: "Total Amount: 1,234.56 EUR/DKK", "Total: €52.48"
-    /(?:total\s*amount|amount\s*due|total)\s*:?\s*(?:EUR|DKK|SEK|USD|GBP|€|\$|£)?\s*([\d\s,.]+\d{2})/i,
+    /(?:total\s*amount|amount\s*due|total)\s*:?\s*(?:EUR|DKK|SEK|USD|GBP|€|\$|£)?\s*([\d \t\u00a0,.]+\d{2})/i,
     // Fortnox: the payment slip's "Att betala:1 185,00 SEK" – the table above has "Belopp att betala\n0,00 …"
     /Att betala:\s*([\d\s]+[.,]\d{2})\s*SEK/i,
     // Whole kronor: "ATT BETALA 1250,-" or "Att betala: 1 250:-"
     /att\s+betala\s*:?\s*(?:SEK|kr)?\s*(\d[\d\s.]*?)\s*[,:]-/i,
     // Swedish: "Att betala: 12 345,67" or "Summa: 1 234,00 SEK"
-    /(?:att\s+betala|total(?:t|belopp)?|summa|belopp)\s*:?\s*([\d\s]+[.,]\d{2})/i,
+    /(?:att\s+betala|total(?:t|belopp)?|summa|belopp)\s*:?\s*([\d \t\u00a0]+[.,]\d{2})/i,
     // Generic: amount followed by currency at end of line
-    /([\d\s]+[.,]\d{2})\s*(?:SEK|EUR|USD|DKK)\s*$/m,
+    /([\d \t\u00a0]+[.,]\d{2})\s*(?:SEK|EUR|USD|DKK)\s*$/m,
   ];
 
   for (const pattern of patterns) {
