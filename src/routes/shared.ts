@@ -80,6 +80,12 @@ export const viewHelpers = {
     return currency ? `${formatted} ${currency}` : formatted;
   },
 
+  /** Whole kronor, for tables of larger sums: "123 456" */
+  kr(amount: number | null | undefined): string {
+    if (amount == null) return "–";
+    return amount.toLocaleString("sv-SE", { maximumFractionDigits: 0 });
+  },
+
   /** ISO timestamp or date → YYYY-MM-DD in Swedish time */
   date(value: string | null | undefined): string {
     if (!value) return "–";

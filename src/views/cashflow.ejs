@@ -1,0 +1,437 @@
+<%- include('partials/head', { title: 'Kassaflöde' }) %>
+<%- include('partials/shell-top') %>
+<%
+  var o = overview;
+  var kindLabel = { shopify: 'Shopify', customer: 'Kundfaktura', supplier: 'Leverantör', vat: 'Moms' };
+  var vatStatus = {
+    building: ['Pågår', 'badge-new'],
+    due: ['Ska betalas', 'badge-approved'],
+    paid: ['Betald', 'badge-paid'],
+    unpaid: ['Ingen betalning hittad', 'badge-overdue'],
+    past: ['Passerad', 'badge-neutral'],
+  };
+  var openVat = o.quarters.filter(function (q) { return q.complete && (q.status === 'building' || q.status === 'due') && q.net > 0; });
+  var dash = function (n) { return n ? h.kr(n) : '–'; };
+  var isAdmin = user && user.role === 'admin';
+  var chart = o.forecast ? {
+    today: o.today,
+    history: o.history.map(function (p) { return { d: p.date, v: p.balance }; }),
+    known: o.forecast.known.map(function (p) { return { d: p.date, v: p.value }; }),
+    trend: o.forecast.trend ? o.forecast.trend.map(function (p) { return { d: p.date, v: p.value }; }) : null,
+  } : null;
+%>
+
+<div class="mb-8">
+  <h1 class="page-title">Kassaflöde</h1>
+  <p class="page-subtitle">Saldot på kontot, vad som är känt att komma in och gå ut, och momsen som byggs upp. Preliminära siffror för planering, inte bokföring.</p>
+</div>
+
+<% if (o.cash == null) { %>
+  <div class="card mb-8 px-6 py-12 text-center">
+    <span class="icon icon-xl mb-3 block text-ink-faint/60">account_balance</span>
+    <p class="font-display font-bold">Inget kontoutdrag ännu</p>
+    <p class="mx-auto mt-1 max-w-md text-sm text-ink-muted">Saldot och prognosen utgår från Nordeas kontoutdrag. Ladda upp ett så fylls sidan i.</p>
+    <a href="/bank-upload" class="btn btn-primary mt-5"><span class="icon">upload_file</span>Ladda upp kontoutdrag</a>
+  </div>
+<% } else { %>
+  <% if (o.cashAgeDays > 7) { %>
+    <div class="flash flash-info"><span class="icon icon-sm">info</span><span>Saldot är <%= o.cashAgeDays %> dagar gammalt. <a href="/bank-upload" class="font-semibold underline">Ladda upp ett nytt kontoutdrag</a> så stämmer prognosen bättre.</span></div>
+  <% } %>
+
+  <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="card p-5">
+      <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Kassa</span>
+      <div class="mt-2 font-display text-2xl font-extrabold"><%= h.kr(o.cash) %> kr</div>
+      <div class="mt-1 text-sm text-ink-muted">Saldo <%= o.cashDate %></div>
+    </div>
+    <div class="card p-5">
+      <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Moms att betala</span>
+      <div class="mt-2 font-display text-2xl font-extrabold"><%= h.kr(o.vatToPay) %> kr</div>
+      <div class="mt-1 text-sm text-ink-muted">
+        <% if (openVat.length) { %>
+          <%- openVat.slice().reverse().map(function (q) { return h.kr(q.net) + (q.status === 'building' ? ' byggs upp i ' + q.label : ' för ' + q.label + ', senast ' + q.dueDate); }).join('<br/>') %>
+        <% } else { %>Inget känt att betala<% } %>
+      </div>
+    </div>
+    <div class="card p-5">
+      <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Kvar efter moms</span>
+      <div class="mt-2 font-display text-2xl font-extrabold"><%= h.kr(o.afterVat) %> kr</div>
+      <div class="mt-1 text-sm text-ink-muted">Kassan minus momsen</div>
+    </div>
+    <div class="card p-5 <%= o.lowest && o.lowest.balance < 0 ? 'border-red-200 bg-red-50/40' : '' %>">
+      <span class="text-xs font-semibold uppercase tracking-wider <%= o.lowest && o.lowest.balance < 0 ? 'text-red-700' : 'text-ink-muted' %>">Lägsta saldo framåt</span>
+      <div class="mt-2 font-display text-2xl font-extrabold <%= o.lowest && o.lowest.balance < 0 ? 'text-red-700' : '' %>"><%= h.kr(o.lowest.balance) %> kr</div>
+      <div class="mt-1 text-sm text-ink-muted">Vecka <%= o.lowest.week %>, enligt kända poster</div>
+    </div>
+  </div>
+
+  <div class="card mb-8 p-6">
+    <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+      <h2 class="section-title">Saldo och prognos</h2>
+      <ul class="flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted">
+        <li class="flex items-center gap-2"><svg width="22" height="4" aria-hidden="true"><line x1="1" y1="2" x2="21" y2="2" stroke="#0c56d0" stroke-width="2" stroke-linecap="round"/></svg>Saldo</li>
+        <li class="flex items-center gap-2"><svg width="22" height="4" aria-hidden="true"><line x1="1" y1="2" x2="21" y2="2" stroke="#0c56d0" stroke-width="2" stroke-dasharray="6 5"/></svg>Kända poster</li>
+        <% if (o.forecast.trend) { %><li class="flex items-center gap-2"><svg width="22" height="4" aria-hidden="true"><line x1="1" y1="2" x2="21" y2="2" stroke="#c2571a" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 5"/></svg>Om snittet håller</li><% } %>
+      </ul>
+    </div>
+    <div id="cf-chart" class="relative mt-4 h-[280px] overflow-hidden" tabindex="0" role="img" aria-label="Saldo de senaste 90 dagarna och prognos för kommande veckor. Värdena finns i tabellen nedan."></div>
+    <p class="hint">
+      ”Kända poster” är bara det som redan finns: obetalda fakturor, väntande Shopify-pengar och momsen.
+      <% if (o.weeklyNet != null) { %>”Om snittet håller” räknar i stället med de senaste åtta veckornas snitt, <%= h.kr(o.weeklyNet) %> kr per vecka, och drar av momsen.<% } %>
+    </p>
+  </div>
+<% } %>
+
+<div class="card mb-8 overflow-hidden">
+  <div class="flex items-center gap-2 border-b border-line px-6 py-4">
+    <span class="icon text-primary">percent</span>
+    <h2 class="section-title">Preliminär moms per kvartal</h2>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full border-collapse">
+      <thead class="border-b border-line bg-surface-low">
+        <tr>
+          <th class="th">Kvartal</th>
+          <th class="th text-right">Shopify</th>
+          <th class="th text-right">Kundfakturor</th>
+          <th class="th text-right">Fakturor</th>
+          <th class="th text-right">Kvitton</th>
+          <th class="th text-right">Att betala</th>
+          <th class="th">Förfaller</th>
+          <th class="th">Status</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        <% o.quarters.forEach(function (q) { var st = vatStatus[q.status]; %>
+          <tr>
+            <td class="td whitespace-nowrap font-semibold"><%= q.label %><span class="block text-xs font-normal text-ink-faint"><%= q.months %></span></td>
+            <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(q.outputShopify) %></td>
+            <td class="td whitespace-nowrap text-right tabular-nums"><%= q.complete ? dash(q.outputCustomers) : '–' %></td>
+            <td class="td whitespace-nowrap text-right tabular-nums text-ink-muted"><%= q.inputInvoices ? '−' + h.kr(q.inputInvoices) : '–' %></td>
+            <td class="td whitespace-nowrap text-right tabular-nums text-ink-muted"><%= q.inputReceipts ? '−' + h.kr(q.inputReceipts) : '–' %></td>
+            <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= q.complete ? h.kr(q.net) : '–' %></td>
+            <td class="td whitespace-nowrap text-sm text-ink-muted"><%= q.dueDate %></td>
+            <td class="td whitespace-nowrap">
+              <% if (q.complete || q.status === 'paid') { %><span class="badge <%= st[1] %>"><%= st[0] %></span><% } else { %><span class="badge badge-neutral">Saknar bankdata</span><% } %>
+              <% if (q.paidAmount != null) { %><span class="mt-1 block text-xs text-ink-muted"><%= h.kr(q.paidAmount) %> kr betalt <%= q.paidDate %></span><% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+  <div class="space-y-1 border-t border-line bg-surface-low px-6 py-3 text-xs text-ink-muted">
+    <p>Utgående moms är Shopify och kundfakturor, ingående moms är fakturor och kvitton. Moms på köp från andra EU-länder är omvänd skattskyldighet och tar ut sig själv. Shopify räknas på utbetalningsdatum, fakturor på mottagningsdatum.</p>
+    <% o.notes.forEach(function (n) { %><p><%= n %></p><% }); %>
+    <% if (o.quarters.some(function (q) { return !q.complete; })) { %><p>”Saknar bankdata” betyder att inget kontoutdrag täcker kvartalet. Det räknas inte in i momsen att betala.</p><% } %>
+  </div>
+</div>
+
+<% if (!fortnox.connected) { %>
+  <div class="card mb-8 p-6">
+    <h2 class="section-title"><span class="icon text-primary">link</span>Koppla Fortnox</h2>
+    <p class="mt-1 text-sm text-ink-muted">Utan kopplingen saknas obetalda kundfakturor i prognosen, och kundfakturornas moms är en uppskattning.</p>
+    <% if (!isAdmin) { %>
+      <p class="hint">En administratör behöver göra kopplingen.</p>
+    <% } else if (fortnox.configured) { %>
+      <a href="/fortnox/connect" class="btn btn-primary mt-4"><span class="icon">link</span>Koppla Fortnox</a>
+      <p class="hint">Du skickas till Fortnox för att godkänna. AFORT läser bara kundfakturor.</p>
+    <% } else { %>
+      <ol class="mt-5 space-y-3 text-sm">
+        <li class="flex gap-3"><span class="badge badge-new">1</span><span>Skapa en integration i <a href="https://www.fortnox.se/developer" target="_blank" rel="noopener" class="font-semibold text-primary hover:underline">Fortnox Developer Portal</a> med behörigheten <span class="font-semibold">Faktura</span> och den här adressen som redirect URI: <code class="break-all font-mono text-xs"><%= fortnox.redirectUri %></code></span></li>
+        <li class="flex gap-3"><span class="badge badge-new">2</span><span>I Railway, tjänsten AFORT → <span class="font-semibold">Variables</span>: lägg till <code class="font-mono text-xs">FORTNOX_CLIENT_ID</code> och <code class="font-mono text-xs">FORTNOX_CLIENT_SECRET</code>.</span></li>
+        <li class="flex gap-3"><span class="badge badge-new">3</span><span>Kom tillbaka hit och klicka på <span class="font-semibold">Koppla Fortnox</span>, som dyker upp här.</span></li>
+      </ol>
+    <% } %>
+  </div>
+<% } %>
+
+<% if (o.forecast) { %>
+  <div class="card mb-8 overflow-hidden">
+    <div class="flex items-center gap-2 border-b border-line px-6 py-4">
+      <span class="icon text-primary">date_range</span>
+      <h2 class="section-title">Kommande veckor</h2>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse">
+        <thead class="border-b border-line bg-surface-low">
+          <tr>
+            <th class="th">Vecka</th>
+            <th class="th text-right">Shopify</th>
+            <th class="th text-right">Kundfakturor</th>
+            <th class="th text-right">Leverantörer</th>
+            <th class="th text-right">Moms</th>
+            <th class="th text-right">Netto</th>
+            <th class="th text-right">Saldo</th>
+            <% if (o.forecast.trend) { %><th class="th text-right">Om snittet håller</th><% } %>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          <% o.forecast.weeks.forEach(function (w) { %>
+            <tr class="hover:bg-surface-low">
+              <td class="td whitespace-nowrap font-semibold">v. <%= w.week %><span class="ml-2 text-xs font-normal text-ink-faint"><%= w.from.slice(5) %> – <%= w.to.slice(5) %></span></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(w.shopify) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(w.customer) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(w.supplier) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(w.vat) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums text-ink-muted"><%= dash(w.net) %></td>
+              <td class="td whitespace-nowrap text-right font-semibold tabular-nums <%= w.balance < 0 ? 'text-red-700' : '' %>"><%= h.kr(w.balance) %></td>
+              <% if (o.forecast.trend) { %><td class="td whitespace-nowrap text-right tabular-nums text-ink-muted"><%= h.kr(w.trend) %></td><% } %>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card mb-8 overflow-hidden">
+    <div class="flex items-center gap-2 border-b border-line px-6 py-4">
+      <span class="icon text-primary">event_upcoming</span>
+      <h2 class="section-title">Kända poster</h2>
+      <span class="badge badge-neutral"><%= o.items.length %></span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse">
+        <thead class="border-b border-line bg-surface-low">
+          <tr><th class="th">Datum</th><th class="th">Typ</th><th class="th">Vad</th><th class="th text-right">Belopp (kr)</th></tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          <% if (o.items.length === 0) { %>
+            <tr><td colspan="4" class="td text-center text-ink-muted">Inget känt att komma in eller gå ut.</td></tr>
+          <% } %>
+          <% o.items.forEach(function (i) { %>
+            <tr class="hover:bg-surface-low">
+              <td class="td whitespace-nowrap text-ink-muted"><%= i.date %></td>
+              <td class="td whitespace-nowrap text-sm"><%= kindLabel[i.kind] %></td>
+              <td class="td">
+                <% if (i.href) { %><a href="<%= i.href %>" class="font-semibold text-primary hover:underline"><%= i.label %></a><% } else { %><span class="font-semibold"><%= i.label %></span><% } %>
+                <% if (i.flag) { %><span class="badge badge-overdue ml-2"><%= i.flag %></span><% } %>
+                <% if (i.original) { %><span class="ml-2 text-xs text-ink-faint"><%= i.original %></span><% } %>
+              </td>
+              <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= h.kr(i.amount) %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+    <% if (o.rates.length || o.settledInvoices) { %>
+      <div class="space-y-1 border-t border-line bg-surface-low px-6 py-3 text-xs text-ink-muted">
+        <% if (o.rates.length) { %><p>Omräknat till kronor med <%= o.rates.map(function (r) { return String(r.rate).replace('.', ',') + ' kr/' + r.currency; }).join(', ') %><%= o.rates.every(function (r) { return r.fromBank; }) ? ', från senaste kortköpet' : '' %>.</p><% } %>
+        <% if (o.settledInvoices) { %><p><%= o.settledInvoices %> fakturor är betalda enligt kontoutdraget men inte avbockade, så de räknas inte här. <a href="/bank-upload" class="font-semibold text-primary hover:underline">Bocka av dem under Bankutdrag.</a></p><% } %>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+
+<% if (o.months.length) { %>
+  <div class="card mb-8 overflow-hidden">
+    <div class="flex items-center gap-2 border-b border-line px-6 py-4">
+      <span class="icon text-primary">history</span>
+      <h2 class="section-title">In och ut per månad</h2>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse">
+        <thead class="border-b border-line bg-surface-low">
+          <tr>
+            <th class="th">Månad</th>
+            <th class="th text-right">Shopify</th>
+            <th class="th text-right">Kunder</th>
+            <th class="th text-right">Övrigt in</th>
+            <th class="th text-right">Leverantörer</th>
+            <th class="th text-right">Kort</th>
+            <th class="th text-right">Skatt</th>
+            <th class="th text-right">Övrigt ut</th>
+            <th class="th text-right">Netto</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          <% o.months.forEach(function (m) { %>
+            <tr class="hover:bg-surface-low">
+              <td class="td whitespace-nowrap font-semibold"><%= m.month %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(m.shopify) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(m.customers) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(m.otherIn) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(m.suppliers) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(m.card) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(m.tax) %></td>
+              <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(m.otherOut) %></td>
+              <td class="td whitespace-nowrap text-right font-semibold tabular-nums"><%= h.kr(m.net) %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+    <p class="border-t border-line bg-surface-low px-6 py-3 text-xs text-ink-muted">Från uppladdade kontoutdrag<% if (o.bankRange) { %>, <%= o.bankRange.from %> till <%= o.bankRange.to %><% } %>.</p>
+  </div>
+<% } %>
+
+<% if (fortnox.connected) { %>
+  <form method="POST" action="/fortnox/sync" class="mb-8 flex flex-wrap items-center gap-3 text-xs text-ink-muted">
+    <button type="submit" class="btn btn-secondary btn-sm"><span class="icon icon-sm">sync</span>Hämta från Fortnox</button>
+    <% if (fortnox.last) { %><span><%= fortnox.last.error ? 'Senaste hämtningen misslyckades: ' + fortnox.last.error : 'Senast hämtat ' + h.date(fortnox.last.at) + ', ' + fortnox.last.unpaid + ' obetalda kundfakturor. Hämtas varje morgon.' %></span><% } %>
+  </form>
+<% } %>
+
+<% if (chart) { %>
+<script type="application/json" id="cf-data"><%- JSON.stringify(chart).replace(/</g, '\\u003c') %></script>
+<script>
+(function () {
+  var host = document.getElementById('cf-chart');
+  var data = JSON.parse(document.getElementById('cf-data').textContent);
+  var NS = 'http://www.w3.org/2000/svg';
+  var DAY = 86400000;
+  var MONTHS = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+  var COLORS = { line: '#e3e9ef', text: '#566168', faint: '#8b969e', ink: '#29343a', blue: '#0c56d0', orange: '#c2571a' };
+  var series = [
+    { key: 'history', name: 'Saldo', color: COLORS.blue },
+    { key: 'known', name: 'Kända poster', color: COLORS.blue, dash: '6 5' },
+    { key: 'trend', name: 'Om snittet håller', color: COLORS.orange, dash: '1 5' }
+  ].filter(function (s) { return data[s.key] && data[s.key].length; });
+
+  var time = function (d) { return Date.parse(d + 'T00:00:00Z'); };
+  var kr = function (v) { return Math.round(v).toLocaleString('sv-SE'); };
+  var tkr = function (v) { return v === 0 ? '0' : Math.round(v / 1000).toLocaleString('sv-SE') + ' tkr'; };
+
+  var first = Math.min.apply(null, series.map(function (s) { return time(data[s.key][0].d); }));
+  var last = Math.max.apply(null, series.map(function (s) { return time(data[s.key][data[s.key].length - 1].d); }));
+  var days = [];
+  for (var t = first; t <= last; t += DAY) days.push(new Date(t).toISOString().slice(0, 10));
+  series.forEach(function (s) { s.byDate = {}; data[s.key].forEach(function (p) { s.byDate[p.d] = p.v; }); });
+
+  var values = [];
+  series.forEach(function (s) { data[s.key].forEach(function (p) { values.push(p.v); }); });
+  var lo = Math.min(0, Math.min.apply(null, values));
+  var hi = Math.max.apply(null, values);
+  var raw = ((hi - lo) || 1000) / 4;
+  var pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  var f = raw / pow;
+  var step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * pow;
+  var yMin = Math.floor(lo / step) * step;
+  var yMax = Math.ceil(hi / step) * step;
+
+  var tip = document.createElement('div');
+  tip.className = 'pointer-events-none absolute z-10 hidden min-w-[11rem] rounded-lg border border-line bg-white px-3 py-2 text-xs shadow-pop';
+  var svg, cross, x, width, height, m = { t: 18, r: 62, b: 26, l: 58 }, current = null;
+
+  function el(name, attrs, parent) {
+    var node = document.createElementNS(NS, name);
+    Object.keys(attrs).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+
+  function label(text, attrs) {
+    var node = el('text', Object.assign({ 'font-size': 11, fill: COLORS.text }, attrs), svg);
+    node.textContent = text;
+    return node;
+  }
+
+  function render() {
+    width = host.clientWidth;
+    height = host.clientHeight;
+    host.textContent = '';
+    host.appendChild(tip);
+    svg = el('svg', { width: width, height: height, 'aria-hidden': 'true' }, host);
+    x = function (d) { return m.l + ((time(d) - first) / ((last - first) || 1)) * (width - m.l - m.r); };
+    var y = function (v) { return m.t + (1 - (v - yMin) / ((yMax - yMin) || 1)) * (height - m.t - m.b); };
+
+    for (var v = yMin; v <= yMax + step / 2; v += step) {
+      el('line', { x1: m.l, x2: width - m.r, y1: y(v), y2: y(v), stroke: COLORS.line, 'stroke-width': 1 }, svg);
+      label(tkr(v), { x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end' });
+    }
+    days.forEach(function (d) {
+      if (d.slice(8) === '01') label(MONTHS[Number(d.slice(5, 7)) - 1], { x: x(d), y: height - 6, 'text-anchor': 'middle' });
+    });
+
+    el('line', { x1: x(data.today), x2: x(data.today), y1: m.t - 6, y2: height - m.b, stroke: COLORS.faint, 'stroke-width': 1 }, svg);
+    label('Idag', { x: x(data.today), y: m.t - 8, 'text-anchor': 'middle', fill: COLORS.ink, 'font-weight': 600 });
+
+    series.forEach(function (s) {
+      var d = data[s.key].map(function (p, i) { return (i ? 'L' : 'M') + x(p.d).toFixed(1) + ' ' + y(p.v).toFixed(1); }).join('');
+      var attrs = { d: d, fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
+      if (s.dash) attrs['stroke-dasharray'] = s.dash;
+      el('path', attrs, svg);
+    });
+
+    // The two endpoints are the numbers the chart is for; side by side they would collide
+    var ends = series.filter(function (s) { return s.key !== 'history'; }).map(function (s) { return data[s.key][data[s.key].length - 1]; });
+    ends.forEach(function (p, i) {
+      if (i && Math.abs(y(p.v) - y(ends[0].v)) < 15) return;
+      label(tkr(p.v), { x: width - m.r + 8, y: y(p.v) + 4, fill: COLORS.ink, 'font-weight': 600 });
+    });
+
+    cross = el('line', { y1: m.t, y2: height - m.b, stroke: COLORS.text, 'stroke-width': 1, visibility: 'hidden' }, svg);
+    series.forEach(function (s) {
+      s.dot = el('circle', { r: 4, fill: s.color, stroke: '#fff', 'stroke-width': 2, visibility: 'hidden' }, svg);
+    });
+    show(current);
+
+    function show(i) {
+      current = i;
+      var on = i != null;
+      tip.classList.toggle('hidden', !on);
+      cross.setAttribute('visibility', on ? 'visible' : 'hidden');
+      series.forEach(function (s) { s.dot.setAttribute('visibility', 'hidden'); });
+      if (!on) return;
+      var d = days[i];
+      cross.setAttribute('x1', x(d));
+      cross.setAttribute('x2', x(d));
+      tip.textContent = '';
+      var head = document.createElement('div');
+      head.className = 'mb-1 font-semibold text-ink';
+      head.textContent = d;
+      tip.appendChild(head);
+      series.forEach(function (s) {
+        if (!(d in s.byDate)) return;
+        s.dot.setAttribute('cx', x(d));
+        s.dot.setAttribute('cy', y(s.byDate[d]));
+        s.dot.setAttribute('visibility', 'visible');
+        var row = document.createElement('div');
+        row.className = 'flex items-center gap-2 py-0.5';
+        var key = document.createElement('span');
+        key.className = 'inline-block h-0.5 w-3 rounded';
+        key.style.background = s.color;
+        var value = document.createElement('span');
+        value.className = 'font-semibold tabular-nums text-ink';
+        value.textContent = kr(s.byDate[d]) + ' kr';
+        var name = document.createElement('span');
+        name.className = 'ml-auto pl-3 text-ink-muted';
+        name.textContent = s.name;
+        row.appendChild(key); row.appendChild(value); row.appendChild(name);
+        tip.appendChild(row);
+      });
+      var left = x(d) + 12;
+      tip.style.left = (left + tip.offsetWidth > width ? x(d) - tip.offsetWidth - 12 : left) + 'px';
+      tip.style.top = m.t + 'px';
+    }
+    host.showDay = show;
+  }
+
+  function dayAt(clientX) {
+    var px = clientX - host.getBoundingClientRect().left;
+    var ratio = Math.max(0, Math.min(1, (px - m.l) / (width - m.l - m.r)));
+    return Math.round(ratio * (days.length - 1));
+  }
+
+  host.addEventListener('pointermove', function (e) { host.showDay(dayAt(e.clientX)); });
+  host.addEventListener('pointerleave', function () { host.showDay(null); });
+  host.addEventListener('focus', function () { host.showDay(days.indexOf(data.today)); });
+  host.addEventListener('blur', function () { host.showDay(null); });
+  host.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    var i = (current == null ? days.indexOf(data.today) : current) + (e.key === 'ArrowLeft' ? -1 : 1);
+    host.showDay(Math.max(0, Math.min(days.length - 1, i)));
+  });
+
+  var timer;
+  render();
+  new ResizeObserver(function () {
+    if (host.clientWidth === width) return;
+    clearTimeout(timer);
+    timer = setTimeout(render, 120);
+  }).observe(host);
+})();
+</script>
+<% } %>
+<%- include('partials/shell-bottom') %>

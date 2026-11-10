@@ -60,6 +60,10 @@ export const env = {
   // All Shopify sales carry Swedish VAT at this rate; the VAT is derived from the gross amounts
   shopifyVatRate: Number.isFinite(parseFloat(process.env.SHOPIFY_VAT_RATE || "")) ? parseFloat(process.env.SHOPIFY_VAT_RATE!) : 25,
 
+  // Fortnox: an integration in Fortnox's Developer Portal with the scope "invoice"; connected under Kassaflöde
+  fortnoxClientId: (process.env.FORTNOX_CLIENT_ID || "").trim(),
+  fortnoxClientSecret: (process.env.FORTNOX_CLIENT_SECRET || "").trim(),
+
   // Claude API (optional)
   claudeApiKey: process.env.CLAUDE_API_KEY || "",
 };

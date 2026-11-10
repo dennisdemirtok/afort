@@ -327,7 +327,7 @@ async function processMessage(messageId: string, mode: PollMode, labels: Labels)
 
   // A PDF we cannot read should still show up, so that it can be filled in by hand
   let parsed: ParsedInvoice = {
-    vendorName: null, invoiceNumber: null, issueDate: null, paymentRef: null, isCreditNote: false, amount: null, currency: null,
+    vendorName: null, invoiceNumber: null, issueDate: null, paymentRef: null, isCreditNote: false, amount: null, vatAmount: null, currency: null,
     dueDate: null, ocr: null, bankgiro: null, plusgiro: null, iban: null,
   };
   try {
@@ -363,6 +363,7 @@ async function processMessage(messageId: string, mode: PollMode, labels: Labels)
     vendor_name: vendorName,
     invoice_number: invoiceNumber,
     amount,
+    vat_amount: creditNote && parsed.vatAmount != null ? -Math.abs(parsed.vatAmount) : parsed.vatAmount,
     currency,
     // A credit note's "due date" is not a bill coming due
     due_date: creditNote ? null : parsed.dueDate,

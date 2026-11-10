@@ -156,6 +156,42 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- Uploaded Nordea statements, for the cash flow. Statements overlap: a row is only stored once.
+    CREATE TABLE IF NOT EXISTS bank_transactions (
+      id TEXT PRIMARY KEY,
+      account TEXT NOT NULL,
+      date TEXT NOT NULL,
+      amount REAL NOT NULL,
+      currency TEXT,
+      name TEXT,
+      message TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- The balance at the end of each day
+    CREATE TABLE IF NOT EXISTS bank_balances (
+      account TEXT NOT NULL,
+      date TEXT NOT NULL,
+      balance REAL NOT NULL,
+      exported_at TEXT NOT NULL,
+      PRIMARY KEY (account, date)
+    );
+
+    -- Customer invoices read from Fortnox
+    CREATE TABLE IF NOT EXISTS customer_invoices (
+      document_number TEXT PRIMARY KEY,
+      customer_name TEXT,
+      invoice_date TEXT,
+      due_date TEXT,
+      total REAL,
+      total_vat REAL,
+      balance REAL,
+      currency TEXT,
+      sek_rate REAL DEFAULT 1,
+      cancelled INTEGER DEFAULT 0,
+      synced_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS meta (
       key TEXT PRIMARY KEY,
       value TEXT
@@ -167,6 +203,7 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_invoices_gmail_id ON invoices(gmail_message_id);
     CREATE INDEX IF NOT EXISTS idx_invoices_vendor ON invoices(vendor_name);
     CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
+    CREATE INDEX IF NOT EXISTS idx_bank_transactions_date ON bank_transactions(date);
   `);
 
   // Migrations for databases created by earlier versions
@@ -175,6 +212,8 @@ function initSchema() {
   addColumnIfMissing("invoices", "manually_edited", "INTEGER DEFAULT 0");
   // A credit note (negative amount) points to the invoice it reduces
   addColumnIfMissing("invoices", "credits_invoice_number", "TEXT");
+  // The VAT the invoice states, for the preliminary VAT report
+  addColumnIfMissing("invoices", "vat_amount", "REAL");
   addColumnIfMissing("vendor_rules", "kind", "TEXT DEFAULT 'invoice'");
   // Card receipts matched to the Nordea statement: what was actually drawn, in SEK
   addColumnIfMissing("receipts", "payment_ref", "TEXT");

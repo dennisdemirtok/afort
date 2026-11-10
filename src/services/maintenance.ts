@@ -28,6 +28,27 @@ export async function backfillIbansFromPdfs(): Promise<number> {
   return filled;
 }
 
+/** Invoices from before the VAT was read: reads it from the stored PDF. Foreign invoices are reverse charge and need none. */
+export async function backfillInvoiceVat(): Promise<number> {
+  const db = getDb();
+  const rows = db.prepare(
+    "SELECT id, pdf_path, amount FROM invoices WHERE vat_amount IS NULL AND currency = 'SEK' AND amount IS NOT NULL AND pdf_path IS NOT NULL"
+  ).all() as { id: string; pdf_path: string; amount: number }[];
+
+  const update = db.prepare("UPDATE invoices SET vat_amount = ? WHERE id = ? AND vat_amount IS NULL");
+  let filled = 0;
+  for (const row of rows) {
+    if (!fs.existsSync(row.pdf_path)) continue;
+    try {
+      const { vatAmount } = await parseInvoicePdf(fs.readFileSync(row.pdf_path));
+      if (vatAmount != null && update.run(row.amount < 0 ? -Math.abs(vatAmount) : vatAmount, row.id).changes > 0) filled++;
+    } catch (err: any) {
+      console.error(`[AFORT] Could not read ${row.pdf_path}:`, err?.message || err);
+    }
+  }
+  return filled;
+}
+
 /**
  * Google Ads "Ditt faktureringsdokument är klart" mails imported as receipts before such
  * link-only notices were skipped. They only hold a link, so they are removed; the invoice

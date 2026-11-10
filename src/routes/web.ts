@@ -24,6 +24,7 @@ import {
   Invoice,
 } from "../models/invoice";
 import { listUnmatchedPayouts, markPayoutReceived, ShopifyPayout } from "../models/shopify";
+import { BankRow, saveBankStatement } from "../models/bank";
 import { Receipt, receiptsWithoutBankMatch, updateReceipt } from "../models/receipt";
 import { listPaymentFiles, getPaymentFileById } from "../models/payment-file";
 import {
@@ -371,14 +372,6 @@ router.post("/settings/rules/:id/remove", requireAdmin, (req: Request, res: Resp
 
 // ==================== Bank statement ====================
 
-interface BankRow {
-  date: string;
-  amount: number;
-  currency: string;
-  name: string;
-  message: string;
-}
-
 function decodeCsv(buffer: Buffer): string {
   let text = buffer.toString("utf-8");
   if (text.includes("�")) text = buffer.toString("latin1");
@@ -390,7 +383,7 @@ export function parseBankCsv(csvText: string): BankRow[] {
   if (lines.length < 2) return [];
   const headers = lines[0].split(";").map((h) => h.trim().toLowerCase());
   const col = (name: string) => headers.indexOf(name);
-  const iDate = col("datum"), iAmount = col("belopp"), iName = col("namn"), iMsg = col("meddelande"), iCur = col("valuta"), iDetails = col("ytterligare detaljer");
+  const iDate = col("datum"), iAmount = col("belopp"), iName = col("namn"), iMsg = col("meddelande"), iCur = col("valuta"), iDetails = col("ytterligare detaljer"), iBalance = col("saldo");
   if (iDate < 0 || iAmount < 0) return [];
 
   const rows: BankRow[] = [];
@@ -404,6 +397,7 @@ export function parseBankCsv(csvText: string): BankRow[] {
       currency: (iCur >= 0 && c[iCur]) || "SEK",
       name: (iName >= 0 && c[iName]) || (iDetails >= 0 && c[iDetails]) || "",
       message: (iMsg >= 0 && c[iMsg]) || "",
+      balance: iBalance >= 0 && c[iBalance] ? parseFloat(c[iBalance].replace(/\s/g, "").replace(",", ".")) : null,
     });
   }
   return rows;
@@ -691,12 +685,15 @@ router.post("/bank-upload", upload.single("csvfile"), (req: Request, res: Respon
   if (rows.length === 0) {
     return res.redirect(flash("/bank-upload", "err", "Filen kunde inte läsas. Exportera kontoutdraget som CSV från Nordea (kolumnerna Datum och Belopp krävs)."));
   }
+  // multer hands over the name as latin1; restore å/ä/ö
+  const filename = Buffer.from(req.file.originalname, "latin1").toString("utf8");
+  const saved = saveBankStatement(rows, filename);
   const { matches, unmatched } = matchBankRows(rows);
   const cards = matchReceiptRows(rows);
   res.render("bank-upload", {
     result: {
-      // multer hands over the name as latin1; restore å/ä/ö
-      filename: Buffer.from(req.file.originalname, "latin1").toString("utf8"),
+      filename,
+      saved,
       payments: rows.filter((r) => r.amount < 0).length,
       toMark: matches.filter((m) => !m.alreadyPaid),
       alreadyPaid: matches.filter((m) => m.alreadyPaid),

@@ -26,6 +26,7 @@ export interface Invoice {
   paid_at: string | null;
   manually_edited: number;
   credits_invoice_number: string | null;
+  vat_amount: number | null;
   created_at: string;
 }
 
@@ -106,8 +107,8 @@ export function createInvoice(data: Partial<Invoice>): Invoice {
   db.prepare(`
     INSERT INTO invoices (id, gmail_message_id, sender, subject, received_at, processed_at,
       vendor_name, invoice_number, amount, currency, due_date, ocr, bankgiro, plusgiro, iban,
-      pdf_path, status, payment_file_id, credits_invoice_number)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      pdf_path, status, payment_file_id, credits_invoice_number, vat_amount)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, data.gmail_message_id || null, data.sender || null, data.subject || null,
     data.received_at || null, data.processed_at || now,
@@ -115,7 +116,7 @@ export function createInvoice(data: Partial<Invoice>): Invoice {
     data.amount ?? null, data.currency || "SEK",
     data.due_date || null, data.ocr || null, data.bankgiro || null,
     data.plusgiro || null, data.iban || null, data.pdf_path || null,
-    data.status || "new", data.payment_file_id || null, data.credits_invoice_number || null
+    data.status || "new", data.payment_file_id || null, data.credits_invoice_number || null, data.vat_amount ?? null
   );
 
   return getInvoiceById(id)!;
@@ -137,6 +138,14 @@ export function listInvoices(filters: InvoiceFilters = {}, page: Page = {}): Inv
     params.push(page.limit, page.offset || 0);
   }
   return getDb().prepare(sql).all(...params) as Invoice[];
+}
+
+export function listUnpaidInvoices(): Invoice[] {
+  return getDb().prepare("SELECT * FROM invoices WHERE status != 'paid'").all() as Invoice[];
+}
+
+export function invoicesReceivedBetween(from: string, to: string): Invoice[] {
+  return getDb().prepare("SELECT * FROM invoices WHERE substr(received_at, 1, 10) BETWEEN ? AND ?").all(from, to) as Invoice[];
 }
 
 export function countInvoices(filters: InvoiceFilters = {}): number {
@@ -208,7 +217,7 @@ export function listVendors(): string[] {
 const EDITABLE_FIELDS = [
   "vendor_name", "invoice_number", "amount", "currency", "due_date",
   "ocr", "bankgiro", "plusgiro", "iban", "status", "payment_file_id",
-  "paid_at", "manually_edited", "pdf_path", "sender", "subject", "received_at", "credits_invoice_number",
+  "paid_at", "manually_edited", "pdf_path", "sender", "subject", "received_at", "credits_invoice_number", "vat_amount",
 ] as const;
 
 export function updateInvoice(id: string, data: Partial<Invoice>): Invoice | undefined {

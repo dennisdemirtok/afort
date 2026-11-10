@@ -9,13 +9,15 @@ import { requireAuth } from "./middleware/auth";
 import { pollGmail, isGmailConfigured } from "./services/gmail";
 import { ensureAdminExists } from "./models/user";
 import { repairInvoiceNumbersFromSubjects, repairInvalidIbans, removeProformaInvoices } from "./models/invoice";
-import { backfillIbansFromPdfs, backfillPaymentRefs, removeLinkOnlyReceipts } from "./services/maintenance";
+import { backfillIbansFromPdfs, backfillInvoiceVat, backfillPaymentRefs, removeLinkOnlyReceipts } from "./services/maintenance";
 import { isShopifyConfigured, syncShopifyPayouts } from "./services/shopify";
+import { isFortnoxConnected, syncFortnoxInvoices } from "./services/fortnox";
 import { viewHelpers, buildIconFontUrl } from "./routes/shared";
 import apiRoutes from "./routes/api";
 import webRoutes from "./routes/web";
 import receiptRoutes from "./routes/receipts";
 import shopifyRoutes from "./routes/shopify";
+import cashflowRoutes from "./routes/cashflow";
 
 const app = express();
 
@@ -78,6 +80,7 @@ app.use((req, res, next) => {
 app.use("/api", apiRoutes);
 app.use("/", receiptRoutes);
 app.use("/", shopifyRoutes);
+app.use("/", cashflowRoutes);
 app.use("/", webRoutes);
 
 app.use((req: Request, res: Response) => {
@@ -107,6 +110,15 @@ app.listen(env.port, () => {
   backfillPaymentRefs()
     .then((n) => { if (n > 0) console.log(`[AFORT] Read the payment reference of ${n} receipts`); })
     .catch((err) => console.error("[AFORT] Payment reference backfill failed:", err));
+
+  backfillInvoiceVat()
+    .then((n) => { if (n > 0) console.log(`[AFORT] Read the VAT of ${n} invoices`); })
+    .catch((err) => console.error("[AFORT] VAT backfill failed:", err));
+
+  // Connected from the Kassaflöde page, so whether it is connected is checked at every run
+  cron.schedule("30 6 * * *", () => {
+    if (isFortnoxConnected()) syncFortnoxInvoices().catch((err) => console.error("[Cron] Fortnox sync failed:", err));
+  });
 
   if (isShopifyConfigured()) {
     // Shopify pays out a few times a week; once a day is plenty, plus once shortly after start

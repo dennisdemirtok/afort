@@ -56,6 +56,17 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   och vad kvittot säger om moms – omvänd skattskyldighet (4535/4598 + 2645/2614), utländsk säljare som debiterat
   svensk moms (hela beloppet som kostnad) eller svensk moms 25 % (2641). Beloppet är det som drogs i SEK från
   banken. Klicka på ett konto eller belopp för att kopiera det. Kontona ska stämmas av med bokföraren.
+- **Kassaflöde** (fliken *Kassaflöde*, `src/services/cashflow.ts`): saldot från senast uppladdade kontoutdrag, en prognos 16 veckor
+  framåt och preliminär moms per kvartal. Varje uppladdat kontoutdrag sparas (samma rad lagras bara en gång, så filerna får överlappa).
+  Prognosen är bara det som är känt: obetalda fakturor på förfallodagen, väntande Shopify-pengar till nästa utbetalning, obetalda
+  kundfakturor från Fortnox och momsen. Betalningar som redan syns på kontoutdraget räknas inte två gånger. Momsen är Shopify och
+  kundfakturor minus momsen på svenska fakturor och kvitton; köp från andra EU-länder är omvänd skattskyldighet och tar ut sig själv.
+  Momsen på fakturor läses ur PDF:en (`vatFromText`). Sista dag är den 12:e andra månaden efter kvartalet (17 augusti). Ett kvartal
+  räknas som betalt när en dragning till Skatteverket syns på kontot.
+- **Fortnox** (kopplas under *Kassaflöde*, `src/services/fortnox.ts`): kundfakturor läses via API:t, varje morgon och på knapptryck.
+  Skapa en integration i Fortnox Developer Portal med behörigheten Faktura och redirect URI `https://<adress>/auth/fortnox/callback`, sätt
+  `FORTNOX_CLIENT_ID` och `FORTNOX_CLIENT_SECRET` och klicka på *Koppla Fortnox*. Tills det är gjort uppskattas kundfakturornas moms ur
+  bankgiroinsättningarna.
 - **Bankutdrag**: ladda upp Nordeas CSV, granska träffarna och bocka av betalda fakturor. Inbetalningar
   som stämmer med en Shopify-utbetalning (belopp, några dagar efter) bockas av på samma sätt.
   Kortköp ("Kortköp 260927 FACEBK *KL2BT764J4") kopplas till sina kvitton – Meta via referensnumret som står

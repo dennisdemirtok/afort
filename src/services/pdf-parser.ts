@@ -7,6 +7,7 @@ export interface ParsedInvoice {
   paymentRef: string | null;
   isCreditNote: boolean;
   amount: number | null;
+  vatAmount: number | null;
   currency: string | null;
   dueDate: string | null;
   ocr: string | null;
@@ -26,6 +27,7 @@ export async function parseInvoicePdf(pdfBuffer: Buffer): Promise<ParsedInvoice>
     paymentRef: paymentRefFromText(text),
     isCreditNote: isCreditNoteText(text),
     amount: extractAmount(text),
+    vatAmount: vatFromText(text),
     currency: extractCurrency(text),
     dueDate: extractDueDate(text),
     ocr: extractOcr(text),
@@ -45,10 +47,34 @@ export function amountFromText(text: string): { amount: number | null; currency:
   return { amount: extractAmount(text), currency: extractCurrency(text) };
 }
 
+// BWS: the line after "Amount" ends with the total – "3.070,96 SEK0,00 SEK0,00 SEK3.070,96 SEK",
+// three amounts on invoices with VAT ("221,50 SEK55,38 SEK276,88 SEK"), minus signs on credit notes
+const BWS_AMOUNT_LINE = /\bAmount\s*\n\s*((?:-?[\d.,]+\s*SEK\s*){3,4})/i;
+
+const swedishNumber = (s: string) => parseFloat(s.replace(/[\s.]/g, "").replace(",", "."));
+
+/** The VAT the document states, or null when it does not say. */
+export function vatFromText(text: string): number | null {
+  // BWS: the VAT is the amount just before the total
+  const bws = text.match(BWS_AMOUNT_LINE);
+  if (bws) {
+    const amounts = [...bws[1].matchAll(/(-?[\d.,]+)\s*SEK/g)].map((m) => swedishNumber(m[1]));
+    return amounts[amounts.length - 2];
+  }
+  // Fortnox invoices, one line per rate: "Moms 25% 180,00 (720,00)"
+  const perRate = [...text.matchAll(/^\s*Moms\s+\d+(?:[.,]\d+)?\s*%\s+([\d \t\u00a0]+,\d{2})\s*\(/gim)];
+  if (perRate.length) return Math.round(perRate.reduce((sum, m) => sum + swedishNumber(m[1]), 0) * 100) / 100;
+  // New Wave: "Moms 25,00 % av 1.079,30\n269,83"
+  const ofBase = text.match(/^\s*Moms\s+\d+(?:[.,]\d+)?\s*%\s+av\s+[\d.,]+\s*\n?\s*([\d.]*\d,\d{2})/im);
+  if (ofBase) return swedishNumber(ofBase[1]);
+  // A line of its own, so that "Exkl. moms 1000,-" is not taken for the VAT: "MOMS 250,-", "Summa moms: 123,45"
+  const line = text.match(/^\s*(?:summa\s+)?moms\s*:?\s*(\d[\d \t\u00a0.]*?)(?:,-|:-|,(\d{2}))\s*(?:SEK|kr)?\s*$/im);
+  if (line) return swedishNumber(`${line[1]},${line[2] || "00"}`);
+  return null;
+}
+
 function extractAmount(text: string): number | null {
-  // BWS: the line after "Amount" ends with the total – "3.070,96 SEK0,00 SEK0,00 SEK3.070,96 SEK",
-  // three amounts on invoices with VAT ("221,50 SEK55,38 SEK276,88 SEK"), minus signs on credit notes
-  const bwsAmountLine = text.match(/\bAmount\s*\n\s*((?:-?[\d.,]+\s*SEK\s*){3,4})/i);
+  const bwsAmountLine = text.match(BWS_AMOUNT_LINE);
   if (bwsAmountLine) {
     const last = [...bwsAmountLine[1].matchAll(/([\d.,]+)\s*SEK/g)].pop()!;
     const val = parseFloat(last[1].replace(/\./g, "").replace(",", "."));
@@ -57,6 +83,8 @@ function extractAmount(text: string): number | null {
 
   // The amount groups below never span lines: "Total:\n1\n143,60" is a quantity and a price, not 1143,60
   const patterns = [
+    // Fortnox invoices: "Exkl. moms Moms Totalt ATT BETALA\n720,00 180,00 900,00\nSEK 900,00" – the first number after the heading is without VAT
+    /ATT BETALA\s*\n[^\n]*\n\s*(?:SEK|EUR)\s*([\d \t\u00a0]+,\d{2})/,
     // Meta ads receipts: "Paid\nSEK20.00" (currency before the amount)
     /\bPaid\s*\n\s*(?:SEK|EUR|USD|DKK|GBP|€|\$|£)\s?([\d,.]*\d[.,]\d{2})/,
     // New Wave: "Fakt.belopp\n1.079,30 0,13- SEK 1.349,00" – before it come "Orderradstotal" and "Ordertotal" without VAT

@@ -13,12 +13,13 @@
            class="input flex-grow cursor-pointer p-1.5 file:mr-4 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary-soft file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"/>
     <button type="submit" class="btn btn-primary"><span class="icon">upload_file</span>Ladda upp och matcha</button>
   </div>
-  <p class="hint">I Nordea Business: Konton → välj konto → Exportera → CSV. Inget sparas förrän du bekräftar i nästa steg.</p>
+  <p class="hint">I Nordea Business: Konton → välj konto → Exportera → CSV. Saldo och transaktioner sparas direkt till Kassaflöde. Fakturor bockas inte av förrän du bekräftar i nästa steg.</p>
 </form>
 
 <% if (result) { %>
   <p class="mb-4 text-sm text-ink-muted">
     <span class="font-semibold text-ink"><%= result.filename %></span> ·
+    <%= result.saved.added %> nya transaktioner till <a href="/cashflow" class="font-semibold text-primary hover:underline">Kassaflöde</a> ·
     <%= result.payments %> utgående betalningar ·
     <%= result.toMark.length %> att bocka av ·
     <%= result.alreadyPaid.length %> redan betalda ·

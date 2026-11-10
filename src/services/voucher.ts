@@ -55,6 +55,16 @@ const REVERSE_CHARGE = /article\s*196|reverse[\s-]*charge|omv[äa]nd\s+skattskyl
 // Stripe PDFs extract some spaces and hyphens as NUL ("VAT - Sweden \u000025%")
 const SWEDISH_VAT_CHARGED = /VAT[\s\u0000]*-[\s\u0000]*Sweden[\s\u0000]*25\s*%|moms\s*\(?\s*25\s*%\s*\)?\s*(?:p[åa]\s*)?[\d$€]/i;
 
+/**
+ * Deductible VAT on a card purchase, in SEK. Reverse charge nets to zero, and Swedish VAT
+ * charged by a foreign seller cannot be deducted. Null while the SEK amount is unknown.
+ */
+export function receiptInputVat(receipt: Receipt): number | null {
+  if (receipt.source && SOURCE_RULES[receipt.source]?.origin === "eu") return 0;
+  const sek = receipt.bank_amount ?? (!receipt.currency || receipt.currency === "SEK" ? receipt.amount : null);
+  return sek == null ? null : Math.round(sek * 20) / 100;
+}
+
 async function documentText(receipt: Receipt): Promise<string> {
   if (!receipt.file_path || !fs.existsSync(receipt.file_path)) return "";
   try {
