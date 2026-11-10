@@ -377,7 +377,7 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
       flag: overdue ? "Förfallen" : inv.due_date ? null : "Saknar förfallodag",
     });
   }
-  if (withoutAmount) notes.push(`${withoutAmount} obetalda fakturor saknar belopp och räknas inte med.`);
+  if (withoutAmount) notes.push(`Obetalda fakturor utan belopp räknas inte med: ${withoutAmount} st.`);
 
   for (const c of listUnpaidCustomerInvoices()) {
     const overdue = !!c.due_date && c.due_date < now;
@@ -430,7 +430,7 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
 
   if (!fortnoxHasData) notes.unshift("Kundfakturorna kommer från bankgiroinsättningar med 25 % moms antagen, tills Fortnox är kopplat.");
   const assumed = quarterResults.reduce((sum, q) => sum + q.assumedInvoices, 0);
-  if (assumed) notes.push(`${assumed} svenska fakturor anger ingen moms som AFORT kan läsa. På dem är 25 % moms antagen.`);
+  if (assumed) notes.push(`Svenska fakturor där AFORT inte kan läsa momsen: ${assumed} st. På dem är 25 % moms antagen.`);
   const usedRates = [...rates.values()].filter((r) => items.some((i) => i.original?.endsWith(r.currency)));
   if (usedRates.some((r) => !r.fromBank)) notes.push("Kursen för utländska fakturor är ett schablonvärde tills ett kortköp i samma valuta har matchats mot banken.");
 

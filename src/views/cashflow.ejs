@@ -217,7 +217,7 @@
     <% if (o.rates.length || o.settledInvoices) { %>
       <div class="space-y-1 border-t border-line bg-surface-low px-6 py-3 text-xs text-ink-muted">
         <% if (o.rates.length) { %><p>Omräknat till kronor med <%= o.rates.map(function (r) { return String(r.rate).replace('.', ',') + ' kr/' + r.currency; }).join(', ') %><%= o.rates.every(function (r) { return r.fromBank; }) ? ', från senaste kortköpet' : '' %>.</p><% } %>
-        <% if (o.settledInvoices) { %><p><%= o.settledInvoices %> fakturor är betalda enligt kontoutdraget men inte avbockade, så de räknas inte här. <a href="/bank-upload" class="font-semibold text-primary hover:underline">Bocka av dem under Bankutdrag.</a></p><% } %>
+        <% if (o.settledInvoices) { %><p>Betalda enligt kontoutdraget men inte avbockade: <%= o.settledInvoices %> st. De räknas inte här. <a href="/bank-upload" class="font-semibold text-primary hover:underline">Bocka av dem under Bankutdrag.</a></p><% } %>
       </div>
     <% } %>
   </div>
