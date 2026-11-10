@@ -6,6 +6,8 @@ export interface CustomerInvoice {
   customer_name: string | null;
   invoice_date: string | null;
   due_date: string | null;
+  // When it was paid in full
+  final_pay_date: string | null;
   total: number | null;
   total_vat: number | null;
   balance: number | null;
@@ -13,18 +15,20 @@ export interface CustomerInvoice {
   // SEK per unit of the invoice's currency
   sek_rate: number;
   cancelled: number;
+  // 0 for a draft that has not been sent to the customer
+  sent: number;
   synced_at: string | null;
 }
 
 export function upsertCustomerInvoice(i: Omit<CustomerInvoice, "total_vat">): void {
   // The list from Fortnox has no VAT; it is fetched once per invoice and must survive a refresh
   getDb().prepare(
-    `INSERT INTO customer_invoices (document_number, customer_name, invoice_date, due_date, total, balance, currency, sek_rate, cancelled, synced_at)
-     VALUES (@document_number, @customer_name, @invoice_date, @due_date, @total, @balance, @currency, @sek_rate, @cancelled, @synced_at)
+    `INSERT INTO customer_invoices (document_number, customer_name, invoice_date, due_date, final_pay_date, total, balance, currency, sek_rate, cancelled, sent, synced_at)
+     VALUES (@document_number, @customer_name, @invoice_date, @due_date, @final_pay_date, @total, @balance, @currency, @sek_rate, @cancelled, @sent, @synced_at)
      ON CONFLICT(document_number) DO UPDATE SET
        customer_name = excluded.customer_name, invoice_date = excluded.invoice_date, due_date = excluded.due_date,
-       total = excluded.total, balance = excluded.balance, currency = excluded.currency, sek_rate = excluded.sek_rate,
-       cancelled = excluded.cancelled, synced_at = excluded.synced_at`
+       final_pay_date = excluded.final_pay_date, total = excluded.total, balance = excluded.balance, currency = excluded.currency,
+       sek_rate = excluded.sek_rate, cancelled = excluded.cancelled, sent = excluded.sent, synced_at = excluded.synced_at`
   ).run(i);
 }
 
@@ -52,8 +56,11 @@ export function listUnpaidCustomerInvoices(): CustomerInvoice[] {
   return getDb().prepare("SELECT * FROM customer_invoices WHERE cancelled = 0 AND COALESCE(balance, 0) != 0 ORDER BY due_date").all() as CustomerInvoice[];
 }
 
-export function customerInvoicesBetween(from: string, to: string): CustomerInvoice[] {
-  return getDb().prepare("SELECT * FROM customer_invoices WHERE cancelled = 0 AND invoice_date BETWEEN ? AND ?").all(from, to) as CustomerInvoice[];
+/** Invoices paid in full within the period – the cash method's output VAT. */
+export function customerInvoicesPaidBetween(from: string, to: string): CustomerInvoice[] {
+  return getDb().prepare(
+    "SELECT * FROM customer_invoices WHERE cancelled = 0 AND COALESCE(balance, 0) = 0 AND final_pay_date BETWEEN ? AND ?"
+  ).all(from, to) as CustomerInvoice[];
 }
 
 export function customerInvoiceCount(): number {

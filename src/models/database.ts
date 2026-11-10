@@ -215,6 +215,9 @@ function initSchema() {
   // The VAT the invoice states, for the preliminary VAT report
   addColumnIfMissing("invoices", "vat_amount", "REAL");
   addColumnIfMissing("vendor_rules", "kind", "TEXT DEFAULT 'invoice'");
+  // Under the cash method a customer invoice's VAT belongs to the day it was paid
+  addColumnIfMissing("customer_invoices", "final_pay_date", "TEXT");
+  addColumnIfMissing("customer_invoices", "sent", "INTEGER DEFAULT 1");
   // Card receipts matched to the Nordea statement: what was actually drawn, in SEK
   addColumnIfMissing("receipts", "payment_ref", "TEXT");
   addColumnIfMissing("receipts", "bank_amount", "REAL");

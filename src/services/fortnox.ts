@@ -143,11 +143,13 @@ export async function syncFortnoxInvoices(fetchFn: FetchFn = fetch, opts: { paus
         customer_name: inv.CustomerName || null,
         invoice_date: inv.InvoiceDate || null,
         due_date: inv.DueDate || null,
+        final_pay_date: inv.FinalPayDate || null,
         total: toNumber(inv.Total),
         balance: toNumber(inv.Balance),
         currency: inv.Currency || "SEK",
         sek_rate: rate && unit ? rate / unit : 1,
         cancelled: inv.Cancelled ? 1 : 0,
+        sent: inv.Sent === false ? 0 : 1,
         synced_at: syncedAt,
       });
     }

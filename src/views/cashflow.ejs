@@ -121,7 +121,7 @@
     </table>
   </div>
   <div class="space-y-1 border-t border-line bg-surface-low px-6 py-3 text-xs text-ink-muted">
-    <p>Utgående moms är Shopify och kundfakturor, ingående moms är fakturor och kvitton. Moms på köp från andra EU-länder är omvänd skattskyldighet och tar ut sig själv. Shopify räknas på utbetalningsdatum, fakturor på mottagningsdatum.</p>
+    <p>Utgående moms är Shopify och kundfakturor, ingående moms är fakturor och kvitton. Moms på köp från andra EU-länder är omvänd skattskyldighet och tar ut sig själv. Räknat med kontantmetoden: momsen hör till kvartalet då pengarna kom in eller gick ut, alltså kundfakturor och leverantörsfakturor på betaldagen och Shopify på utbetalningsdagen. Vid bokslutet räknas även obetalda fakturor med, det gör inte AFORT.</p>
     <% o.notes.forEach(function (n) { %><p><%= n %></p><% }); %>
     <% if (o.quarters.some(function (q) { return !q.complete; })) { %><p>”Saknar bankdata” betyder att inget kontoutdrag täcker kvartalet. Det räknas inte in i momsen att betala.</p><% } %>
   </div>

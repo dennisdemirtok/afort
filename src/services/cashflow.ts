@@ -1,7 +1,7 @@
 import { env } from "../config/env";
 import { BankRow, balanceHistory, bankDataRange, bankRowsSince, latestBalances } from "../models/bank";
-import { customerInvoiceCount, customerInvoicesBetween, listUnpaidCustomerInvoices } from "../models/fortnox";
-import { Invoice, invoicesReceivedBetween, listUnpaidInvoices, payableAmount, today } from "../models/invoice";
+import { customerInvoiceCount, customerInvoicesPaidBetween, listUnpaidCustomerInvoices } from "../models/fortnox";
+import { Invoice, invoicesPaidBetween, listUnpaidInvoices, payableAmount, today } from "../models/invoice";
 import { Receipt, listReceipts } from "../models/receipt";
 import { ShopifyPayout, listPayouts } from "../models/shopify";
 import { getPendingBalance, vatOf } from "./shopify";
@@ -10,6 +10,9 @@ import { receiptInputVat } from "./voucher";
 /**
  * Rolling cash flow: the bank balance, what is known to come in and go out, and the VAT that has
  * built up. Everything here is a preliminary figure for planning, not bookkeeping.
+ *
+ * VAT follows the cash method, which Transfercraft uses: it belongs to the quarter in which the
+ * money came in or went out, not the invoice date.
  */
 
 // ---- Dates (plain YYYY-MM-DD strings) ----
@@ -132,7 +135,8 @@ export interface VatData {
   today: string;
   payouts: ShopifyPayout[];
   pendingVat: number;
-  invoices: Pick<Invoice, "amount" | "currency" | "received_at" | "vat_amount">[];
+  // Supplier invoices paid in the quarter, with the day they were paid
+  invoices: (Pick<Invoice, "amount" | "currency" | "vat_amount"> & { paid_at: string | null })[];
   receipts: Receipt[];
   bankRows: BankRow[];
   bankRange: { from: string; to: string } | null;
@@ -159,7 +163,7 @@ export function calculateVatQuarter(q: Quarter, data: VatData): VatQuarter & { a
   let inputInvoices = 0;
   let assumedInvoices = 0;
   for (const inv of data.invoices) {
-    if (!within(inv.received_at) || inv.amount == null) continue;
+    if (!within(inv.paid_at) || inv.amount == null) continue;
     // Foreign suppliers are reverse charge: the VAT goes in and out and nets to zero
     if (inv.currency !== "SEK") continue;
     if (inv.vat_amount != null) {
@@ -335,12 +339,12 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
       today: now,
       payouts,
       pendingVat: pending?.vat || 0,
-      invoices: invoicesReceivedBetween(q.start, q.end),
+      invoices: invoicesPaidBetween(q.start, q.end),
       receipts,
       bankRows,
       bankRange,
       customerVat: fortnoxHasData
-        ? (period) => customerInvoicesBetween(period.start, period.end).reduce((sum, i) => sum + (i.total_vat || 0) * i.sek_rate, 0)
+        ? (period) => customerInvoicesPaidBetween(period.start, period.end).reduce((sum, i) => sum + (i.total_vat || 0) * i.sek_rate, 0)
         : null,
       vatRate: env.shopifyVatRate,
     })
@@ -388,7 +392,7 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
       label: `${c.customer_name || "Kund"}, faktura ${c.document_number}`,
       original: c.currency && c.currency !== "SEK" ? `${(c.balance || 0).toLocaleString("sv-SE", { minimumFractionDigits: 2 })} ${c.currency}` : null,
       href: null,
-      flag: overdue ? "Förfallen" : null,
+      flag: !c.sent ? "Utkast, inte skickad" : overdue ? "Förfallen" : null,
     });
   }
 

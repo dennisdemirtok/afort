@@ -119,6 +119,9 @@ app.listen(env.port, () => {
   cron.schedule("30 6 * * *", () => {
     if (isFortnoxConnected()) syncFortnoxInvoices().catch((err) => console.error("[Cron] Fortnox sync failed:", err));
   });
+  setTimeout(() => {
+    if (isFortnoxConnected()) syncFortnoxInvoices().catch((err) => console.error("[AFORT] Initial Fortnox sync failed:", err));
+  }, 30000);
 
   if (isShopifyConfigured()) {
     // Shopify pays out a few times a week; once a day is plenty, plus once shortly after start

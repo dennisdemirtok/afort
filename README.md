@@ -61,7 +61,8 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   Prognosen är bara det som är känt: obetalda fakturor på förfallodagen, väntande Shopify-pengar till nästa utbetalning, obetalda
   kundfakturor från Fortnox och momsen. Betalningar som redan syns på kontoutdraget räknas inte två gånger. Momsen är Shopify och
   kundfakturor minus momsen på svenska fakturor och kvitton; köp från andra EU-länder är omvänd skattskyldighet och tar ut sig själv.
-  Momsen på fakturor läses ur PDF:en (`vatFromText`). Sista dag är den 12:e andra månaden efter kvartalet (17 augusti). Ett kvartal
+  Momsen räknas med kontantmetoden, som Transfercraft använder: kundfakturor och leverantörsfakturor på betaldagen, Shopify på
+  utbetalningsdagen. Momsen på fakturor läses ur PDF:en (`vatFromText`). Sista dag är den 12:e andra månaden efter kvartalet (17 augusti). Ett kvartal
   räknas som betalt när en dragning till Skatteverket syns på kontot.
 - **Fortnox** (kopplas under *Kassaflöde*, `src/services/fortnox.ts`): kundfakturor läses via API:t, varje morgon och på knapptryck.
   Skapa en integration i Fortnox Developer Portal med behörigheten Faktura och redirect URI `https://<adress>/auth/fortnox/callback`, sätt
