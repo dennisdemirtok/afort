@@ -13,11 +13,12 @@
   var openVat = o.quarters.filter(function (q) { return q.complete && (q.status === 'building' || q.status === 'due') && q.net > 0; });
   var dash = function (n) { return n ? h.kr(n) : '–'; };
   var isAdmin = user && user.role === 'admin';
+  var b = o.basis;
   var chart = o.forecast ? {
     today: o.today,
     history: o.history.map(function (p) { return { d: p.date, v: p.balance }; }),
     known: o.forecast.known.map(function (p) { return { d: p.date, v: p.value }; }),
-    trend: o.forecast.trend ? o.forecast.trend.map(function (p) { return { d: p.date, v: p.value }; }) : null,
+    prognosis: o.forecast.prognosis ? o.forecast.prognosis.map(function (p) { return { d: p.date, v: p.value }; }) : null,
   } : null;
 %>
 
@@ -71,14 +72,25 @@
       <ul class="flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted">
         <li class="flex items-center gap-2"><svg width="22" height="4" aria-hidden="true"><line x1="1" y1="2" x2="21" y2="2" stroke="#0c56d0" stroke-width="2" stroke-linecap="round"/></svg>Saldo</li>
         <li class="flex items-center gap-2"><svg width="22" height="4" aria-hidden="true"><line x1="1" y1="2" x2="21" y2="2" stroke="#0c56d0" stroke-width="2" stroke-dasharray="6 5"/></svg>Kända poster</li>
-        <% if (o.forecast.trend) { %><li class="flex items-center gap-2"><svg width="22" height="4" aria-hidden="true"><line x1="1" y1="2" x2="21" y2="2" stroke="#c2571a" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 5"/></svg>Om snittet håller</li><% } %>
+        <% if (o.forecast.prognosis) { %><li class="flex items-center gap-2"><svg width="22" height="4" aria-hidden="true"><line x1="1" y1="2" x2="21" y2="2" stroke="#c2571a" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 5"/></svg>Prognos</li><% } %>
       </ul>
     </div>
     <div id="cf-chart" class="relative mt-4 h-[280px] overflow-hidden" tabindex="0" role="img" aria-label="Saldo de senaste 90 dagarna och prognos för kommande veckor. Värdena finns i tabellen nedan."></div>
-    <p class="hint">
-      ”Kända poster” är bara det som redan finns: obetalda fakturor, väntande Shopify-pengar och momsen.
-      <% if (o.weeklyNet != null) { %>”Om snittet håller” räknar i stället med de senaste åtta veckornas snitt, <%= h.kr(o.weeklyNet) %> kr per vecka, och drar av momsen.<% } %>
-    </p>
+    <p class="hint">”Kända poster” är bara det som redan finns: obetalda fakturor, väntande Shopify-pengar och momsen.</p>
+    <% if (o.forecast.prognosis) { %>
+      <div class="mt-4 rounded-lg border border-line bg-surface-low px-4 py-3 text-xs text-ink-muted">
+        <p class="mb-1 font-semibold text-ink">”Prognos” är kända poster plus det som brukar komma:</p>
+        <ul class="list-disc space-y-0.5 pl-4">
+          <% if (b.shopifyWeekly) { %><li>Shopify: <span class="font-semibold text-ink"><%= h.kr(b.shopifyWeekly) %> kr</span> per utbetalning, snittet av de senaste fyra veckornas utbetalningar.</li><% } else { %><li>Shopify: bara den väntande utbetalningen, tills det finns fyra veckors utbetalningar.</li><% } %>
+          <% if (b.customersWeekly) { %><li>Kundfakturor: de som redan är skickade, och från <%= b.knownCustomersUntil %> <span class="font-semibold text-ink"><%= h.kr(b.customersWeekly) %> kr</span> i veckan, snittet av <%= b.customersFrom === 'fortnox' ? 'betalda kundfakturor de senaste 13 veckorna' : 'bankgiroinsättningarna de senaste fyra veckorna' %>.</li><% } %>
+          <li>Leverantörer och kort: <span class="font-semibold text-ink"><%= h.kr(b.costsWeekly) %> kr</span> i veckan, snittet av de senaste fyra veckorna på kontoutdraget, eller de kända fakturorna om de är fler.</li>
+          <li>Moms på den beräknade försäljningen läggs på kvartalets moms.</li>
+        </ul>
+        <p class="mt-1">Snitten räknas om varje gång sidan öppnas, så prognosen följer med när nya utbetalningar, kontoutdrag och fakturor kommer in. Säsong som Black Friday och jul räknas inte in. Den här veckan räknas bara med det kända.</p>
+      </div>
+    <% } else { %>
+      <p class="hint">En prognos med Shopify, kundfakturor och kostnader visas när kontoutdragen täcker fyra hela veckor bakåt.</p>
+    <% } %>
   </div>
 <% } %>
 
@@ -163,7 +175,7 @@
             <th class="th text-right">Moms</th>
             <th class="th text-right">Netto</th>
             <th class="th text-right">Saldo</th>
-            <% if (o.forecast.trend) { %><th class="th text-right">Om snittet håller</th><% } %>
+            <% if (o.forecast.prognosis) { %><th class="th text-right">Beräknat</th><th class="th text-right">Prognos</th><% } %>
           </tr>
         </thead>
         <tbody class="divide-y divide-line">
@@ -176,7 +188,10 @@
               <td class="td whitespace-nowrap text-right tabular-nums"><%= dash(w.vat) %></td>
               <td class="td whitespace-nowrap text-right tabular-nums text-ink-muted"><%= dash(w.net) %></td>
               <td class="td whitespace-nowrap text-right font-semibold tabular-nums <%= w.balance < 0 ? 'text-red-700' : '' %>"><%= h.kr(w.balance) %></td>
-              <% if (o.forecast.trend) { %><td class="td whitespace-nowrap text-right tabular-nums text-ink-muted"><%= h.kr(w.trend) %></td><% } %>
+              <% if (o.forecast.prognosis) { %>
+                <td class="td whitespace-nowrap text-right tabular-nums text-ink-muted"><%= dash(w.estimated) %></td>
+                <td class="td whitespace-nowrap text-right font-semibold tabular-nums <%= w.prognosis < 0 ? 'text-red-700' : '' %>"><%= h.kr(w.prognosis) %></td>
+              <% } %>
             </tr>
           <% }); %>
         </tbody>
@@ -261,7 +276,7 @@
         </tbody>
       </table>
     </div>
-    <p class="border-t border-line bg-surface-low px-6 py-3 text-xs text-ink-muted">Från uppladdade kontoutdrag<% if (o.bankRange) { %>, <%= o.bankRange.from %> till <%= o.bankRange.to %><% } %>.</p>
+    <p class="border-t border-line bg-surface-low px-6 py-3 text-xs text-ink-muted">Pengar in och ut på kontot enligt uppladdade kontoutdrag<% if (o.bankRange) { %>, <%= o.bankRange.from %> till <%= o.bankRange.to %><% } %>. Det är kassaflödet, inte resultatet: momsen ingår, och betalningar hamnar i den månad de görs.</p>
   </div>
 <% } %>
 
@@ -285,7 +300,7 @@
   var series = [
     { key: 'history', name: 'Saldo', color: COLORS.blue },
     { key: 'known', name: 'Kända poster', color: COLORS.blue, dash: '6 5' },
-    { key: 'trend', name: 'Om snittet håller', color: COLORS.orange, dash: '1 5' }
+    { key: 'prognosis', name: 'Prognos', color: COLORS.orange, dash: '1 5' }
   ].filter(function (s) { return data[s.key] && data[s.key].length; });
 
   var time = function (d) { return Date.parse(d + 'T00:00:00Z'); };

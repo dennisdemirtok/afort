@@ -230,22 +230,24 @@ export interface ForecastWeek {
   vat: number;
   net: number;
   balance: number;
-  trend: number | null;
+  // What the prognosis adds on top of the known items this week
+  estimated: number;
+  prognosis: number | null;
 }
 
 export interface Forecast {
   weeks: ForecastWeek[];
   known: { date: string; value: number }[];
-  trend: { date: string; value: number }[] | null;
+  prognosis: { date: string; value: number }[] | null;
 }
 
-export function buildForecast(input: { today: string; opening: number; items: CashItem[]; weeklyNet: number | null; weeks: number }): Forecast {
-  const { today: start, opening, items, weeklyNet } = input;
+/** Known items give the "Kända poster" line; known plus estimated items give the prognosis. */
+export function buildForecast(input: { today: string; opening: number; items: CashItem[]; estimates: CashItem[] | null; weeks: number }): Forecast {
+  const { today: start, opening, items, estimates } = input;
   const first = mondayOf(start);
-  const sumUntil = (date: string, kinds?: CashItem["kind"][]) =>
-    items.filter((i) => i.date <= date && (!kinds || kinds.includes(i.kind))).reduce((sum, i) => sum + i.amount, 0);
-  const trendAt = (date: string) =>
-    weeklyNet == null ? null : round(opening + (weeklyNet / 7) * ((toTime(date) - toTime(start)) / DAY) + sumUntil(date, ["vat"]));
+  const sum = (list: CashItem[], until: string) => list.filter((i) => i.date <= until).reduce((total, i) => total + i.amount, 0);
+  const sumUntil = (date: string) => sum(items, date);
+  const prognosisAt = (date: string) => (estimates ? round(opening + sumUntil(date) + sum(estimates, date)) : null);
 
   const weeks: ForecastWeek[] = [];
   for (let i = 0; i < input.weeks; i++) {
@@ -261,29 +263,80 @@ export function buildForecast(input: { today: string; opening: number; items: Ca
       customer: total("customer"),
       supplier: total("supplier"),
       vat: total("vat"),
-      net: round(inWeek.reduce((sum, item) => sum + item.amount, 0)),
+      net: round(inWeek.reduce((total, item) => total + item.amount, 0)),
       balance: round(opening + sumUntil(to)),
-      trend: trendAt(to),
+      estimated: round((estimates || []).filter((e) => e.date >= from && e.date <= to).reduce((total, e) => total + e.amount, 0)),
+      prognosis: prognosisAt(to),
     });
   }
 
   const last = weeks[weeks.length - 1].to;
   const known: Forecast["known"] = [];
-  const trend: NonNullable<Forecast["trend"]> = [];
+  const prognosis: NonNullable<Forecast["prognosis"]> = [];
   for (let d = start; d <= last; d = addDays(d, 1)) {
     known.push({ date: d, value: round(opening + sumUntil(d)) });
-    const value = trendAt(d);
-    if (value != null) trend.push({ date: d, value });
+    const value = prognosisAt(d);
+    if (value != null) prognosis.push({ date: d, value });
   }
-  return { weeks, known, trend: weeklyNet == null ? null : trend };
+  return { weeks, known, prognosis: estimates ? prognosis : null };
 }
 
-/** Average net per week over the last eight full weeks, VAT payments left out. Null without eight weeks of statements. */
-export function averageWeeklyNet(rows: BankRow[], todayDate: string, range: { from: string } | null): number | null {
-  const to = addDays(mondayOf(todayDate), -1);
-  const from = addDays(to, -55);
-  if (!range || range.from > addDays(from, 7)) return null;
-  return round(rows.filter((r) => r.date >= from && r.date <= to && bankCategory(r) !== "tax").reduce((sum, r) => sum + r.amount, 0) / 8);
+/** What the prognosis rests on, per week, worked out from the last weeks' actual figures. */
+export interface ForecastBasis {
+  // Average Shopify payout over the last four weeks, and the first payout day that is not already known
+  shopifyWeekly: number | null;
+  firstEstimatedPayout: string | null;
+  // Average paid customer invoices per week, counted from the day after the known invoices run out
+  customersWeekly: number | null;
+  customersFrom: "fortnox" | "bank";
+  knownCustomersUntil: string;
+  // Average paid to suppliers and by card per week (positive)
+  costsWeekly: number | null;
+  vatRate: number;
+}
+
+/**
+ * The prognosis on top of the known items. Shopify: the average payout on every coming payout day.
+ * Customers: once the invoices already sent run out, the average – or the known invoices if they are
+ * more. Costs: the average, or the known invoices if they are more. The current week keeps to what is
+ * known. The VAT on the estimated sales is added to its quarter, when that is due within the period.
+ */
+export function estimateItems(basis: ForecastBasis, items: CashItem[], todayDate: string, weeks: number): CashItem[] {
+  const estimates: CashItem[] = [];
+  const first = mondayOf(todayDate);
+  const last = addDays(first, weeks * 7 - 1);
+  const estimate = (date: string, amount: number, kind: CashItem["kind"], label: string) =>
+    estimates.push({ date, amount: round(amount), kind, label, original: null, href: null, flag: null });
+
+  if (basis.shopifyWeekly && basis.firstEstimatedPayout) {
+    for (let day = basis.firstEstimatedPayout; day <= last; day = addDays(day, 7)) estimate(day, basis.shopifyWeekly, "shopify", "Shopify, beräknad utbetalning");
+  }
+  for (let i = 1; i < weeks; i++) {
+    const from = addDays(first, i * 7);
+    const to = addDays(from, 6);
+    const known = (kind: CashItem["kind"]) => items.filter((item) => item.kind === kind && item.date >= from && item.date <= to).reduce((total, item) => total + item.amount, 0);
+    const midweek = addDays(from, 2);
+    if (basis.customersWeekly && from > basis.knownCustomersUntil && known("customer") < basis.customersWeekly) {
+      estimate(midweek, basis.customersWeekly - known("customer"), "customer", "Kundfakturor, beräknat");
+    }
+    if (basis.costsWeekly && known("supplier") > -basis.costsWeekly) {
+      estimate(midweek, -basis.costsWeekly - known("supplier"), "supplier", "Leverantörer och kort, beräknat");
+    }
+  }
+
+  // Cash method: the VAT belongs to the quarter the money comes in
+  const vatByQuarter = new Map<string, { quarter: Quarter; vat: number }>();
+  for (const e of estimates) {
+    if (e.amount <= 0) continue;
+    const quarter = recentQuarters(e.date, 1)[0];
+    const entry = vatByQuarter.get(quarter.key) || { quarter, vat: 0 };
+    entry.vat += vatOf(e.amount, basis.vatRate);
+    vatByQuarter.set(quarter.key, entry);
+  }
+  for (const { quarter, vat } of vatByQuarter.values()) {
+    if (quarter.dueDate <= last) estimate(quarter.dueDate, -vat, "vat", `Moms på beräknad försäljning ${quarter.label}`);
+  }
+  return estimates.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // ---- The page ----
@@ -313,7 +366,7 @@ export interface CashflowOverview {
   items: CashItem[];
   history: { date: string; balance: number }[];
   months: MonthFlow[];
-  weeklyNet: number | null;
+  basis: ForecastBasis;
   rates: SekRate[];
   notes: string[];
   bankRange: { from: string; to: string } | null;
@@ -406,11 +459,14 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
     items.push({ date: issued > now ? issued : now, amount: p.net, kind: "shopify", label: `Shopify-utbetalning #${p.id}`, original: null, href: "/shopify", flag: null });
   }
 
-  if (pending && pending.net > 0) {
-    // Shopify pays out on a fixed weekday; the money it holds arrives with the next one
-    const lastPayout = payouts.map((p) => (p.issued_at || "").slice(0, 10)).filter(Boolean).sort().pop();
-    let next = lastPayout ? addDays(lastPayout, 7) : addDays(now, 7);
-    while (next < now) next = addDays(next, 7);
+  // Shopify pays out on a fixed weekday; the money it holds arrives with the next one
+  const paidOut = payouts.filter((p) => p.issued_at && p.net != null && p.shopify_status !== "FAILED" && p.shopify_status !== "CANCELED");
+  const lastPayout = paidOut.map((p) => p.issued_at!.slice(0, 10)).sort().pop();
+  let nextPayout = lastPayout ? addDays(lastPayout, 7) : addDays(now, 7);
+  while (nextPayout < now) nextPayout = addDays(nextPayout, 7);
+  const next = nextPayout;
+  const pendingKnown = !!pending && pending.net > 0;
+  if (pending && pendingKnown) {
     items.push({ date: next, amount: round(pending.net), kind: "shopify", label: `Shopify, väntande försäljning (${pending.count} transaktioner)`, original: null, href: "/shopify", flag: null });
   }
 
@@ -420,8 +476,29 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
   items.sort((a, b) => a.date.localeCompare(b.date) || a.amount - b.amount);
 
   // ---- Forecast and history ----
-  const weeklyNet = averageWeeklyNet(bankRows, now, bankRange);
-  const forecast = cash == null ? null : buildForecast({ today: now, opening: cash, items, weeklyNet, weeks: FORECAST_WEEKS });
+  // Four full weeks back from this Monday, for the averages that come from the statements
+  const windowFrom = addDays(mondayOf(now), -28);
+  const windowTo = addDays(mondayOf(now), -1);
+  const statementsCover = !!bankRange && bankRange.from <= windowFrom;
+  const inWindow = bankRows.filter((r) => r.date >= windowFrom && r.date <= windowTo);
+  const firstPayout = paidOut.map((p) => p.issued_at!.slice(0, 10)).sort()[0];
+  const recentPayouts = paidOut.filter((p) => p.issued_at!.slice(0, 10) > addDays(now, -28));
+  const basis: ForecastBasis = {
+    shopifyWeekly: firstPayout && firstPayout <= addDays(now, -28) ? round(recentPayouts.reduce((total, p) => total + p.net!, 0) / 4) : null,
+    firstEstimatedPayout: lastPayout ? (pendingKnown ? addDays(next, 7) : next) : null,
+    customersWeekly: fortnoxHasData
+      ? round(customerInvoicesPaidBetween(addDays(now, -91), addDays(now, -1)).reduce((total, c) => total + (c.total || 0) * c.sek_rate, 0) / 13)
+      : statementsCover ? round(inWindow.filter((r) => bankCategory(r) === "customers").reduce((total, r) => total + r.amount, 0) / 4) : null,
+    customersFrom: fortnoxHasData ? "fortnox" : "bank",
+    knownCustomersUntil: addDays(now, 30),
+    costsWeekly: statementsCover
+      ? round(-inWindow.filter((r) => ["suppliers", "card", "otherOut"].includes(bankCategory(r))).reduce((total, r) => total + r.amount, 0) / 4)
+      : null,
+    vatRate: env.shopifyVatRate,
+  };
+  // Without the costs a prognosis would only add income, so it waits for four weeks of statements
+  const estimates = cash != null && basis.costsWeekly != null ? estimateItems(basis, items, now, FORECAST_WEEKS) : null;
+  const forecast = cash == null ? null : buildForecast({ today: now, opening: cash, items, estimates, weeks: FORECAST_WEEKS });
   const lowest = forecast ? forecast.weeks.reduce((min, w) => (w.balance < min.balance ? w : min), forecast.weeks[0]) : null;
 
   const months = new Map<string, MonthFlow>();
@@ -452,7 +529,7 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
     items,
     history: balanceHistory(addDays(now, -HISTORY_DAYS), now),
     months: [...months.values()].sort((a, b) => b.month.localeCompare(a.month)).slice(0, 6),
-    weeklyNet,
+    basis,
     rates: usedRates,
     notes,
     bankRange,

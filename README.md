@@ -58,8 +58,11 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   banken. Klicka på ett konto eller belopp för att kopiera det. Kontona ska stämmas av med bokföraren.
 - **Kassaflöde** (fliken *Kassaflöde*, `src/services/cashflow.ts`): saldot från senast uppladdade kontoutdrag, en prognos 16 veckor
   framåt och preliminär moms per kvartal. Varje uppladdat kontoutdrag sparas (samma rad lagras bara en gång, så filerna får överlappa).
-  Prognosen är bara det som är känt: obetalda fakturor på förfallodagen, väntande Shopify-pengar till nästa utbetalning, obetalda
-  kundfakturor från Fortnox och momsen. Betalningar som redan syns på kontoutdraget räknas inte två gånger. Momsen är Shopify och
+  Linjen *Kända poster* är bara det som är känt: obetalda fakturor på förfallodagen, väntande Shopify-pengar till nästa utbetalning, obetalda
+  kundfakturor från Fortnox och momsen. Linjen *Prognos* lägger till det som brukar komma: Shopify med snittet av de fyra senaste
+  veckornas utbetalningar, kundfakturor med snittet av de 13 senaste veckorna när de skickade fakturorna tar slut (30 dagar fram),
+  leverantörer och kort med snittet av de fyra senaste veckorna på kontoutdraget (eller de kända fakturorna om de är fler), och
+  momsen på den beräknade försäljningen. Betalningar som redan syns på kontoutdraget räknas inte två gånger. Momsen är Shopify och
   kundfakturor minus momsen på svenska fakturor och kvitton; köp från andra EU-länder är omvänd skattskyldighet och tar ut sig själv.
   Momsen räknas med kontantmetoden, som Transfercraft använder: kundfakturor på betaldagen, Shopify på utbetalningsdagen
   (leverantörsfakturor på fakturadatum – de betalas inom några veckor). Momsen på fakturor läses ur PDF:en (`vatFromText`). Sista dag är den 12:e andra månaden efter kvartalet (17 augusti). Ett kvartal
