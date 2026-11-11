@@ -90,25 +90,44 @@ export interface AccountBalance {
   balance: number;
 }
 
-/** The newest known balance of every account. */
+// Nordea prints no balance on the rows booked today, so they come after the last day with one
+const AFTER_LAST_BALANCE = `SELECT t.account, t.date, SUM(t.amount) AS amount FROM bank_transactions t
+  WHERE t.date > (SELECT MAX(b.date) FROM bank_balances b WHERE b.account = t.account)
+  GROUP BY t.account, t.date ORDER BY t.date`;
+
+/** The newest balance of every account: the last one Nordea printed, plus what was booked after it. */
 export function latestBalances(): AccountBalance[] {
-  return getDb().prepare(
+  const db = getDb();
+  const balances = db.prepare(
     `SELECT b.account, b.date, b.balance FROM bank_balances b
      JOIN (SELECT account, MAX(date) AS date FROM bank_balances GROUP BY account) newest
        ON newest.account = b.account AND newest.date = b.date`
   ).all() as AccountBalance[];
+  for (const later of db.prepare(AFTER_LAST_BALANCE).all() as { account: string; date: string; amount: number }[]) {
+    const b = balances.find((x) => x.account === later.account);
+    if (!b) continue;
+    b.balance = round(b.balance + later.amount);
+    b.date = later.date;
+  }
+  return balances;
 }
 
 /** The total balance day by day; a day without transactions keeps the previous day's balance. */
 export function balanceHistory(from: string, to: string): { date: string; balance: number }[] {
-  const rows = getDb().prepare("SELECT account, date, balance FROM bank_balances ORDER BY date").all() as AccountBalance[];
+  const db = getDb();
+  type Change = { account: string; date: string; set?: number; add?: number };
+  const changes: Change[] = [
+    ...(db.prepare("SELECT account, date, balance FROM bank_balances").all() as AccountBalance[]).map((r) => ({ account: r.account, date: r.date, set: r.balance })),
+    ...(db.prepare(AFTER_LAST_BALANCE).all() as { account: string; date: string; amount: number }[]).map((r) => ({ account: r.account, date: r.date, add: r.amount })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
   const current = new Map<string, number>();
   const history: { date: string; balance: number }[] = [];
   let next = 0;
   for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86400000) {
     const date = new Date(t).toISOString().slice(0, 10);
-    while (next < rows.length && rows[next].date <= date) {
-      current.set(rows[next].account, rows[next].balance);
+    while (next < changes.length && changes[next].date <= date) {
+      const c = changes[next];
+      current.set(c.account, c.set ?? (current.get(c.account) || 0) + (c.add || 0));
       next++;
     }
     if (current.size) history.push({ date, balance: round([...current.values()].reduce((sum, b) => sum + b, 0)) });
