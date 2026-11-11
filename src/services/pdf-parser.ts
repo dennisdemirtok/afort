@@ -85,6 +85,8 @@ function extractAmount(text: string): number | null {
   const patterns = [
     // Fortnox invoices: "Exkl. moms Moms Totalt ATT BETALA\n720,00 180,00 900,00\nSEK 900,00" – the first number after the heading is without VAT
     /ATT BETALA\s*\n[^\n]*\n\s*(?:SEK|EUR)\s*([\d \t\u00a0]+,\d{2})/,
+    // PostNord: "Totalt (inkl. moms):\n336 kr" – whole kronor or "67.2"
+    /Totalt\s*\(inkl\.?\s*moms\)\s*:?\s*(\d[\d \u00a0]*(?:[.,]\d{1,2})?)\s*kr\b/i,
     // Meta ads receipts: "Paid\nSEK20.00" (currency before the amount)
     /\bPaid\s*\n\s*(?:SEK|EUR|USD|DKK|GBP|€|\$|£)\s?([\d,.]*\d[.,]\d{2})/,
     // New Wave: "Fakt.belopp\n1.079,30 0,13- SEK 1.349,00" – before it come "Orderradstotal" and "Ordertotal" without VAT

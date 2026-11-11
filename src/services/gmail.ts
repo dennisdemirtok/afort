@@ -24,6 +24,7 @@ import { parseInvoicePdf, ParsedInvoice, amountFromText, paymentRefFromText } fr
 import {
   matchRule,
   matchReceiptRule,
+  receivedBeforeRule,
   matchSenderRule,
   creditedInvoiceNumber,
   isCreditNoteSubject,
@@ -103,29 +104,29 @@ async function getOrCreateLabel(labelName: string): Promise<string> {
   return created.data.id!;
 }
 
-async function downloadPdfAttachment(
-  messageId: string,
-  parts: gmail_v1.Schema$MessagePart[]
-): Promise<{ filename: string; data: Buffer } | null> {
-  for (const part of parts) {
+function pdfParts(parts: gmail_v1.Schema$MessagePart[]): gmail_v1.Schema$MessagePart[] {
+  return parts.flatMap((part) => {
     // Some senders (Blue Water's NoReply) attach PDFs as application/octet-stream
     const isPdf =
       part.mimeType === "application/pdf" ||
       (part.mimeType === "application/octet-stream" && part.filename?.toLowerCase().endsWith(".pdf"));
-    if (isPdf && part.body?.attachmentId) {
-      const attachment = await gmail.users.messages.attachments.get({
-        userId: "me",
-        messageId,
-        id: part.body.attachmentId,
-      });
-      return { filename: part.filename || "invoice.pdf", data: Buffer.from(attachment.data.data!, "base64") };
-    }
-    if (part.parts) {
-      const nested = await downloadPdfAttachment(messageId, part.parts);
-      if (nested) return nested;
-    }
-  }
-  return null;
+    return [...(isPdf && part.body?.attachmentId ? [part] : []), ...pdfParts(part.parts || [])];
+  });
+}
+
+/**
+ * The first PDF – or, when there are several, the one named as a receipt or invoice: PostNord
+ * attaches "Kvitto_….pdf" next to "Fraktsedlar_….pdf", the labels with the recipients' addresses.
+ */
+async function downloadPdfAttachment(
+  messageId: string,
+  parts: gmail_v1.Schema$MessagePart[]
+): Promise<{ filename: string; data: Buffer } | null> {
+  const pdfs = pdfParts(parts);
+  const part = pdfs.find((p) => /kvitto|receipt|faktura|invoice/i.test(p.filename || "")) || pdfs[0];
+  if (!part) return null;
+  const attachment = await gmail.users.messages.attachments.get({ userId: "me", messageId, id: part.body!.attachmentId! });
+  return { filename: part.filename || "invoice.pdf", data: Buffer.from(attachment.data.data!, "base64") };
 }
 
 async function listMessageIds(query: string, max: number): Promise<string[]> {
@@ -243,6 +244,13 @@ async function processReceipt(
     } catch (err) {
       console.error(`[Gmail] Could not read receipt PDF in ${messageId} (${subject}):`, err);
     }
+    // The mail itself often states the total when the PDF's layout cannot be read
+    if (amount == null) {
+      const html = findBody(parts, "text/html");
+      const found = amountFromText(html ? htmlToText(html) : findBody(parts, "text/plain") || "");
+      amount = found.amount;
+      currency = currency || found.currency;
+    }
   } else {
     const html = findBody(parts, "text/html");
     const text = html ? null : findBody(parts, "text/plain");
@@ -306,8 +314,13 @@ async function processMessage(messageId: string, mode: PollMode, labels: Labels)
 
   let rule = matchRule(from, subject, listRules("invoice"));
   let onlyIfCreditNote = false;
+  if (rule && receivedBeforeRule(rule, receivedAt)) rule = null;
   if (!rule) {
     const receiptRule = matchReceiptRule(from, subject, listRules("receipt"));
+    if (receiptRule && receivedBeforeRule(receiptRule, receivedAt)) {
+      ignoredMessageIds.add(messageId);
+      return "skipped";
+    }
     if (receiptRule) return processReceipt(messageId, full.data, from, subject, receivedAt, receiptRule, mode, labels.receipts);
     // A credit note can arrive as a reply in a thread ("RE: Fråga om fakturan"), whatever the subject says
     rule = matchSenderRule(from, listRules("invoice"));
@@ -495,6 +508,12 @@ export async function pollGmail(mode: PollMode = "new"): Promise<PollStatus & { 
 
     const invoiceSenders = [...new Set(listRules("invoice").map((r) => r.from_address.toLowerCase()))];
     const receiptSenders = [...new Set(listRules("receipt").map((r) => r.from_address.toLowerCase()))];
+    // A sender whose every rule has a start date is only searched from the earliest of them
+    const startOf = (sender: string): string | null => {
+      const rules = [...listRules("invoice"), ...listRules("receipt")].filter((r) => r.from_address.toLowerCase() === sender);
+      if (rules.some((r) => !r.active_from)) return null;
+      return rules.map((r) => r.active_from!).sort()[0];
+    };
     const messageIds = new Set<string>();
 
     // One search per sender – large OR queries silently drop results in the Gmail API.
@@ -509,6 +528,7 @@ export async function pollGmail(mode: PollMode = "new"): Promise<PollStatus & { 
         `from:${sender.replace(/^@/, "")}`,
         attachment ? "has:attachment filename:pdf" : "",
         mode === "new" ? "newer_than:30d" : "",
+        startOf(sender) ? `after:${startOf(sender)!.replace(/-/g, "/")}` : "",
       ].filter(Boolean).join(" ");
       try {
         for (const id of await listMessageIds(query, mode === "new" ? 100 : 1000)) messageIds.add(id);

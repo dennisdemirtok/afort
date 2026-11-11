@@ -10,6 +10,8 @@ export interface VendorRule {
   subject_contains: string | null;
   vendor_name: string | null;
   kind: RuleKind;
+  // YYYY-MM-DD: mail received earlier is not imported
+  active_from: string | null;
   created_at: string;
 }
 
@@ -19,15 +21,16 @@ export function listRules(kind: RuleKind = "invoice"): VendorRule[] {
     .all(kind) as VendorRule[];
 }
 
-export function createRule(fromAddress: string, subjectContains?: string, vendorName?: string, kind: RuleKind = "invoice"): VendorRule {
+export function createRule(fromAddress: string, subjectContains?: string, vendorName?: string, kind: RuleKind = "invoice", activeFrom?: string | null): VendorRule {
   const db = getDb();
   const id = uuidv4();
-  db.prepare("INSERT INTO vendor_rules (id, from_address, subject_contains, vendor_name, kind) VALUES (?, ?, ?, ?, ?)").run(
+  db.prepare("INSERT INTO vendor_rules (id, from_address, subject_contains, vendor_name, kind, active_from) VALUES (?, ?, ?, ?, ?, ?)").run(
     id,
     fromAddress.trim().toLowerCase(),
     subjectContains?.trim() || null,
     vendorName?.trim() || null,
-    kind
+    kind,
+    activeFrom || null
   );
   return db.prepare("SELECT * FROM vendor_rules WHERE id = ?").get(id) as VendorRule;
 }

@@ -361,8 +361,12 @@ router.post("/settings/rules/add", requireAdmin, (req: Request, res: Response) =
   }
   const kind = req.body.kind === "receipt" ? "receipt" : "invoice";
   if (ruleExists(from, kind)) return res.redirect(flash("/settings", "err", `${from} finns redan som avsändare.`));
-  createRule(from, req.body.subject_contains, req.body.vendor_name, kind);
-  res.redirect(flash("/settings", "ok", `${from} tillagd. ${kind === "receipt" ? "Kvitton" : "Fakturor"} från de senaste 30 dagarna hämtas vid nästa kontroll.`));
+  const activeFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.active_from || "")) ? String(req.body.active_from) : null;
+  createRule(from, req.body.subject_contains, req.body.vendor_name, kind, activeFrom);
+  const what = kind === "receipt" ? "Kvitton" : "Fakturor";
+  res.redirect(flash("/settings", "ok", activeFrom
+    ? `${from} tillagd. ${what} från och med ${activeFrom} hämtas vid nästa kontroll.`
+    : `${from} tillagd. ${what} från de senaste 30 dagarna hämtas vid nästa kontroll.`));
 });
 
 router.post("/settings/rules/:id/remove", requireAdmin, (req: Request, res: Response) => {

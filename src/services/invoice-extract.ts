@@ -7,6 +7,13 @@ export interface SenderRule {
   from_address: string;
   subject_contains: string | null;
   vendor_name: string | null;
+  // YYYY-MM-DD: mail received earlier is not imported
+  active_from?: string | null;
+}
+
+/** A rule with a start date leaves earlier mail alone. The date is Swedish local time. */
+export function receivedBeforeRule(rule: SenderRule, receivedAt: Date): boolean {
+  return !!rule.active_from && receivedAt.toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" }) < rule.active_from;
 }
 
 // A mail must look like it is about an invoice before we even consider it
@@ -150,6 +157,8 @@ export function isLinkOnlyNotice(subject: string, text: string): boolean {
 /** "order number DISTRI-ORD08544", "Receipt #12345", "faktura 4567890123" */
 export function extractReferenceFromSubject(subject: string): string | null {
   const m =
+    // PostNord: "Kvitto och frakthandlingar <SBDA11DCGEY2VKQE>"
+    subject.match(/<([A-Z0-9]{8,})>/) ||
     subject.match(/order\s+(?:number|no\.?|nr\.?|#)\s*:?\s*([A-Z0-9][\w-]{2,})/i) ||
     subject.match(/(?:invoice|faktura|kvitto|receipt|transaction|transaktion)\s*(?:number|no\.?|nr\.?|#|id)?\s*:?\s*([A-Z0-9][\w-]{3,})/i) ||
     subject.match(/#\s?([A-Z0-9][\w-]{3,})/i);

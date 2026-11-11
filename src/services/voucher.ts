@@ -34,6 +34,7 @@ const ACCOUNT_NAMES: Record<string, string> = {
   "4515": "Inköp av varor från annat EU-land, 25 %",
   "4535": "Inköp av tjänster från annat EU-land, 25 %",
   "4598": "Justering, omvänd moms",
+  "5710": "Frakter och transporter",
   "5910": "Annonsering",
   "6540": "IT-tjänster",
   "6990": "Övriga externa kostnader",
@@ -46,6 +47,7 @@ const SOURCE_RULES: Record<string, { account: string; kind: "service" | "goods";
   Google: { account: "6540", kind: "service", origin: "eu" }, // Google Workspace, Google Ireland
   Anthropic: { account: "6540", kind: "service", origin: "eu" }, // Anthropic Ireland
   Distribold: { account: "4515", kind: "goods", origin: "eu" }, // 3D&I BV, Netherlands
+  PostNord: { account: "5710", kind: "service", origin: "se" }, // PostNord Sverige AB, 25 % VAT
 };
 
 // The company card is drawn straight from the business account
