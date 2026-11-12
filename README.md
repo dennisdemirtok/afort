@@ -25,6 +25,8 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   belopp, ingen förfallodag och kan inte betalas. Från en känd avsändare plockas de upp även som svar i en tråd.
   Fakturan de gäller läses ur mailet ("on invoice 16620131") och kan fyllas i på kreditnotan. Betalfilen betalar
   fakturan minus kreditnotan, med båda numren i meddelandet, och kreditnotan bockas av när fakturan betalas.
+- **Ladda upp faktura** (fliken *Fakturor*): en faktura som inte kom med mail läses från PDF:en på samma sätt. Leverantören
+  känns igen om namnet står i PDF:en, och fakturan kan läggas in som redan betald med ett betaldatum.
 - **Kvitton** (fliken *Kvitton*): kortköp från Distribold, Google, Meta och PostNord hämtas från samma Gmail. En avsändare
   kan få ett startdatum – då hämtas bara kvitton från och med det (PostNord betalades privat före 11 november 2026).
   Finns en PDF sparas den, annars sparas själva mailet. Belopp och referens tolkas så gott det går och

@@ -141,7 +141,8 @@ function extractDueDate(text: string): string | null {
     /(?:förfallo(?:datum|dag)|förfaller|due\s*date|betalningsdag)\s*:?\s*(\d{4}-\d{2}-\d{2})/i,
     // English: "Due Date: 30/04/2026" or "Payment due: 2026-04-30"
     /(?:due\s*date|payment\s*due)\s*:?\s*(\d{4}-\d{2}-\d{2})/i,
-    /(?:due\s*date|payment\s*due)\s*:?\s*(\d{2}[./-]\d{2}[./-]\d{4})/i,
+    // German: "Fälligkeitsdatum\n14.02.2026"
+    /(?:due\s*date|payment\s*due|fälligkeitsdatum)\s*:?\s*(\d{2}[./-]\d{2}[./-]\d{4})/i,
     // Generic ISO date after "due" keyword
     /(?:förfaller|due|termin)\s*.*?(\d{4}-\d{2}-\d{2})/i,
   ];
@@ -211,6 +212,8 @@ function extractInvoiceNumber(text: string): string | null {
   const patterns = [
     // Blue Water: the document number follows the account number, "Your Account No:\n181751\n16631296"
     /Your Account No:\s*\n\s*\d+\s*\n\s*(\d{6,})/,
+    // inFakt (DTFtransfer): "Invoice ZB/2026/01/395", glued to the buyer's VAT number before it
+    /(?:^|[^A-Za-z])Invoice\s+([A-Z]{1,4}\/\d{4}\/\d{2}\/\d+)/,
     // Polish: "Nr: 8/4/2026/WDT/DTF"
     /Nr\s*:?\s*([\d/]+\/\w+(?:\/\w+)?)/i,
     // English: "Invoice No: INV-12345"
@@ -269,7 +272,8 @@ function extractVendorName(text: string): string | null {
 
 function extractCurrency(text: string): string | null {
   // Check for explicit currency markers
-  if (/DO ZAPŁATY.*€/i.test(text) || /\bBrutto\s*\(EUR\)/i.test(text) || /\bEUR\b/.test(text)) return "EUR";
+  // inFakt invoices total in € but also show the VAT "in PLN"
+  if (/DO ZAPŁATY.*€/i.test(text) || /\bBrutto\s*\(EUR\)/i.test(text) || /\bEUR\b/.test(text) || /^Total[\d\s.,]+€/m.test(text)) return "EUR";
   // Meta ads: "SEK20.00"
   const prefixed = text.match(/\b(SEK|DKK|USD|GBP)(?=\d)/);
   if (prefixed) return prefixed[1];

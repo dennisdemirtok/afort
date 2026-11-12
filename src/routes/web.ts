@@ -17,6 +17,7 @@ import {
   findByVendorAndNumber,
   normalizeInvoiceNumber,
   findProformaRef,
+  createInvoice,
   creditsFor,
   creditedInvoice,
   payableAmount,
@@ -46,6 +47,11 @@ import { requireAdmin, currentUser, sessionCookieOptions, SESSION_COOKIE } from 
 import { env } from "../config/env";
 import { getDb } from "../models/database";
 import { filtersFromQuery } from "./shared";
+import { pdfUpload } from "./receipts";
+import { parseInvoicePdf } from "../services/pdf-parser";
+import pdfParse from "pdf-parse";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -151,6 +157,63 @@ router.get("/invoices", (req: Request, res: Response) => {
 });
 
 // Several PDFs as one ZIP file
+/** An invoice that never came by mail: the PDF is read like a mailed one. Registered before /invoices/:id. */
+router.post(
+  "/invoices/upload",
+  (req: Request, res: Response, next) =>
+    pdfUpload.single("pdf")(req, res, (err: unknown) => {
+      if (err) return res.redirect(flash("/invoices", "err", "Filen är för stor (max 15 MB)."));
+      next();
+    }),
+  async (req: Request, res: Response) => {
+    const file = req.file;
+    if (!file) return res.redirect(flash("/invoices", "err", "Välj en PDF."));
+    let text: string;
+    let parsed: Awaited<ReturnType<typeof parseInvoicePdf>>;
+    try {
+      text = (await pdfParse(file.buffer)).text;
+      parsed = await parseInvoicePdf(file.buffer);
+    } catch {
+      return res.redirect(flash("/invoices", "err", "Filen gick inte att läsa som PDF."));
+    }
+    // The supplier is one AFORT already knows when its name is in the PDF ("DTFtransfer.com Sp. z o.o.")
+    const chosen = String(req.body.vendor_name || "").trim();
+    const known = listVendors().filter((v) => text.toLowerCase().includes(v.toLowerCase())).sort((a, b) => b.length - a.length)[0];
+    // The PDF's first line is rarely the supplier ("Buyer:"), so an unknown one is named by hand afterwards
+    const vendorName = chosen || known || "Okänd leverantör";
+    if (parsed.invoiceNumber) {
+      const existing = findByVendorAndNumber(vendorName, parsed.invoiceNumber)[0];
+      if (existing) return res.redirect(flash(`/invoices/${existing.id}`, "err", `Faktura ${parsed.invoiceNumber} från ${vendorName} finns redan.`));
+    }
+    const filename = Buffer.from(file.originalname, "latin1").toString("utf8");
+    const issued = parsed.issueDate ? new Date(`${parsed.issueDate}T12:00:00Z`) : new Date();
+    const dir = path.join(env.invoicesDir, issued.toISOString().slice(0, 7));
+    fs.mkdirSync(dir, { recursive: true });
+    const pdfPath = path.join(dir, `upload-${uuidv4()}_${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`);
+    fs.writeFileSync(pdfPath, file.buffer);
+    const invoice = createInvoice({
+      sender: "Uppladdad för hand",
+      subject: filename,
+      received_at: issued.toISOString(),
+      vendor_name: vendorName,
+      invoice_number: parsed.invoiceNumber,
+      amount: parsed.amount,
+      vat_amount: parsed.vatAmount,
+      currency: parsed.currency || "SEK",
+      due_date: parsed.dueDate,
+      ocr: parsed.ocr,
+      bankgiro: parsed.bankgiro,
+      plusgiro: parsed.plusgiro,
+      iban: parsed.iban,
+      pdf_path: pdfPath,
+      status: "new",
+    });
+    const paidAt = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.paid_at || "")) ? String(req.body.paid_at) : null;
+    if (req.body.paid === "1") updateInvoice(invoice.id, { status: "paid", paid_at: paidAt || undefined });
+    res.redirect(flash(`/invoices/${invoice.id}`, "ok", `Fakturan är inlagd${req.body.paid === "1" ? " som betald" : ""}. Kontrollera uppgifterna nedan.`));
+  }
+);
+
 router.post("/invoices/download-zip", (req: Request, res: Response) => {
   const invoices = getInvoicesByIds(asArray(req.body.ids)).filter((inv) => inv.pdf_path && fs.existsSync(inv.pdf_path));
   if (invoices.length === 0) return res.redirect(flash("/invoices", "err", "Inga PDF:er hittades för de valda fakturorna."));

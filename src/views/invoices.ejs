@@ -23,11 +23,39 @@
     <button type="button" id="poll-button" class="btn btn-secondary" onclick="pollNow(this)">
       <span class="icon">sync</span><span data-label>Hämta nya nu</span>
     </button>
+    <button type="button" class="btn btn-secondary" aria-controls="invoice-upload" onclick="document.getElementById('invoice-upload').classList.toggle('hidden')">
+      <span class="icon">upload_file</span>Ladda upp faktura
+    </button>
     <a href="/api/export/csv<%= h.filterQuery(filters) %>" class="btn btn-secondary" title="Exporterar de fakturor som visas med nuvarande filter">
       <span class="icon">download</span>Exportera CSV
     </a>
   </div>
 </div>
+
+<form id="invoice-upload" method="POST" action="/invoices/upload" enctype="multipart/form-data" class="card mb-6 hidden p-6">
+  <h2 class="section-title mb-2"><span class="icon text-primary">upload_file</span>Ladda upp en faktura som PDF</h2>
+  <p class="mb-4 text-sm text-ink-muted">För fakturor som inte kommer med mail. PDF:en läses som en mailad faktura; leverantören känns igen om namnet står i PDF:en.</p>
+  <div class="grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_auto]">
+    <div>
+      <label class="label" for="invoice-upload-pdf">PDF</label>
+      <input type="file" name="pdf" id="invoice-upload-pdf" accept="application/pdf,.pdf" required
+             class="input cursor-pointer p-1.5 file:mr-4 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary-soft file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary"/>
+    </div>
+    <div>
+      <label class="label" for="invoice-upload-vendor">Leverantör (valfritt)</label>
+      <input class="input" type="text" id="invoice-upload-vendor" name="vendor_name" list="invoice-upload-vendors" placeholder="Känns igen ur PDF:en" autocomplete="off"/>
+      <datalist id="invoice-upload-vendors"><% vendors.forEach(function (v) { %><option value="<%= v %>"></option><% }); %></datalist>
+    </div>
+    <div>
+      <span class="label">Redan betald</span>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="paid" value="1" id="invoice-upload-paid" class="rounded border-line text-primary"/>
+        <input class="input w-auto" type="date" name="paid_at" value="<%= h.date(new Date().toISOString()) %>" aria-label="Betaldatum"/>
+      </div>
+    </div>
+  </div>
+  <button type="submit" class="btn btn-primary mt-4"><span class="icon">upload_file</span>Ladda upp</button>
+</form>
 
 <!-- Overview -->
 <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
