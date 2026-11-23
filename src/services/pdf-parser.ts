@@ -212,6 +212,8 @@ function extractInvoiceNumber(text: string): string | null {
   const patterns = [
     // Blue Water: the document number follows the account number, "Your Account No:\n181751\n16631296"
     /Your Account No:\s*\n\s*\d+\s*\n\s*(\d{6,})/,
+    // PostNord receipts: "Din beställning: #SBD3PRF60NZ16JDT" – the same order number as in the mail's subject
+    /Din beställning:\s*#?([A-Z0-9]{8,})/,
     // inFakt (DTFtransfer): "Invoice ZB/2026/01/395", glued to the buyer's VAT number before it
     /(?:^|[^A-Za-z])Invoice\s+([A-Z]{1,4}\/\d{4}\/\d{2}\/\d+)/,
     // Polish: "Nr: 8/4/2026/WDT/DTF"
@@ -258,7 +260,8 @@ function extractIssueDate(text: string): string | null {
   const match =
     // Meta ads: "Invoice/payment date\n27 Sep 2026, 07:31"
     text.match(new RegExp(`Invoice\\/payment\\s+date\\s*\\n?\\s*${DATE}`, "i")) ||
-    text.match(new RegExp(`(?:invoice\\s*date|fakturadatum|date\\s*of\\s*issue|data\\s*wystawienia|rechnungsdatum)\\s*:?\\s*\\n?\\s*${DATE}`, "i")) ||
+    // PostNord receipts: "Transaktionsdatum:\n23 november 2026 kl. 12:35"
+    text.match(new RegExp(`(?:invoice\\s*date|fakturadatum|date\\s*of\\s*issue|data\\s*wystawienia|rechnungsdatum|transaktionsdatum)\\s*:?\\s*\\n?\\s*${DATE}`, "i")) ||
     // Google: the values come before their labels – the first date after "Fakturanummer: 5708227824"
     text.match(/(?:Fakturanummer|Invoice number):\s*\d+[\s\S]{0,400}?(\d{1,2}\s+[A-Za-zåäö]+\.?\s+\d{4})/i);
   return match ? parseDateText(match[1]) : null;
