@@ -40,7 +40,7 @@
     <div class="flash flash-info"><span class="icon icon-sm">info</span><span>Saldot är <%= o.cashAgeDays %> dagar gammalt. <a href="/bank-upload" class="font-semibold underline">Ladda upp ett nytt kontoutdrag</a> så stämmer prognosen bättre.</span></div>
   <% } %>
 
-  <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
     <div class="card p-5">
       <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Kassa</span>
       <div class="mt-2 font-display text-2xl font-extrabold"><%= h.kr(o.cash) %> kr</div>
@@ -59,6 +59,16 @@
       <span class="text-xs font-semibold uppercase tracking-wider text-ink-muted"><%= o.printerAccrued ? 'Kvar efter moms och tryck' : 'Kvar efter moms' %></span>
       <div class="mt-2 font-display text-2xl font-extrabold"><%= h.kr(o.afterVat) %> kr</div>
       <div class="mt-1 text-sm text-ink-muted"><% if (o.printerAccrued) { %>Kassan minus momsen och tryckfakturan som byggs upp, <%= h.kr(o.printerAccrued) %> kr<% } else { %>Kassan minus momsen<% } %></div>
+    </div>
+    <div class="card border-primary/30 bg-primary-soft/40 p-5">
+      <span class="text-xs font-semibold uppercase tracking-wider text-primary">Kvar när allt har kommit in</span>
+      <div class="mt-2 font-display text-2xl font-extrabold"><%= h.kr(o.allIn) %> kr</div>
+      <div class="mt-1 space-y-0.5 text-sm text-ink-muted">
+        <div>+ <%= h.kr(o.pipeline.customers) %> kr obetalda kundfakturor<% if (o.pipeline.customersOverdue) { %>, varav <%= h.kr(o.pipeline.customersOverdue) %> förfallna<% } %></div>
+        <% if (o.pipeline.shopify) { %><div>+ <%= h.kr(o.pipeline.shopify) %> kr från Shopify</div><% } %>
+        <div>− <%= h.kr(o.pipeline.suppliers) %> kr obetalda leverantörsfakturor</div>
+        <div>− <%= h.kr(o.pipeline.customersVat) %> kr moms på kundfakturorna</div>
+      </div>
     </div>
     <div class="card p-5 <%= o.lowest && o.lowest.balance < 0 ? 'border-red-200 bg-red-50/40' : '' %>">
       <span class="text-xs font-semibold uppercase tracking-wider <%= o.lowest && o.lowest.balance < 0 ? 'text-red-700' : 'text-ink-muted' %>">Lägsta saldo framåt</span>

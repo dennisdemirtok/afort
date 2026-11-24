@@ -68,7 +68,9 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   momsen på den beräknade försäljningen. Betalningar som redan syns på kontoutdraget räknas inte två gånger.
   Tryckeriet (Fancywork) fakturerar en månad i taget efter månadens slut ("…/WDT/DRUK") och betalas runt den 14:e. Tills
   fakturan kommit räknas kostnaden som försäljningen utan moms gånger tryckeriets andel de senaste tre månaderna – för det
-  som redan sålts bland kända poster och i *Kvar efter moms och tryck*, för den beräknade försäljningen i prognosen. Momsen är Shopify och
+  som redan sålts bland kända poster och i *Kvar efter moms och tryck*, för den beräknade försäljningen i prognosen.
+  *Kvar när allt har kommit in* är kassan minus moms och tryck, plus obetalda kundfakturor och pengar Shopify ska betala ut,
+  minus obetalda leverantörsfakturor och momsen på kundfakturorna (den blir skuld först när de betalas). Momsen är Shopify och
   kundfakturor minus momsen på svenska fakturor och kvitton; köp från andra EU-länder är omvänd skattskyldighet och tar ut sig själv.
   Momsen räknas med kontantmetoden, som Transfercraft använder: kundfakturor på betaldagen, Shopify på utbetalningsdagen
   (leverantörsfakturor på fakturadatum – de betalas inom några veckor). Momsen på fakturor läses ur PDF:en (`vatFromText`). Sista dag är den 12:e andra månaden efter kvartalet (17 augusti). Ett kvartal

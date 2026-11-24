@@ -437,6 +437,9 @@ export interface CashflowOverview {
   vatToPay: number;
   afterVat: number | null;
   printerAccrued: number;
+  // "Kvar efter moms och tryck" once everything on its way has come in and gone out
+  allIn: number | null;
+  pipeline: { customers: number; customersOverdue: number; customersVat: number; shopify: number; suppliers: number };
   accrued: { month: string; sales: number; cost: number; payday: string }[];
   lowest: ForecastWeek | null;
   quarters: VatQuarter[];
@@ -492,6 +495,8 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
   // ---- What is known to come in and go out ----
   const items: CashItem[] = [];
 
+  // What is on its way in and out, for "Kvar när allt har kommit in"
+  const pipeline = { customers: 0, customersOverdue: 0, customersVat: 0, shopify: 0, suppliers: 0 };
   let settledInvoices = 0;
   let withoutAmount = 0;
   for (const inv of listUnpaidInvoices()) {
@@ -503,6 +508,7 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
     const rate = inv.currency === "SEK" ? 1 : rates.get(inv.currency)?.rate;
     if (rate == null) { notes.push(`${inv.vendor_name} ${inv.invoice_number}: ingen kurs för ${inv.currency}, räknas inte med.`); continue; }
     const overdue = !!inv.due_date && inv.due_date < now;
+    pipeline.suppliers += payable * rate;
     items.push({
       date: !inv.due_date || overdue ? now : inv.due_date,
       amount: -round(payable * rate),
@@ -517,6 +523,11 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
 
   for (const c of listUnpaidCustomerInvoices()) {
     const overdue = !!c.due_date && c.due_date < now;
+    const sek = (c.balance || 0) * c.sek_rate;
+    pipeline.customers += sek;
+    if (overdue) pipeline.customersOverdue += sek;
+    // Cash method: their VAT is owed once they are paid
+    pipeline.customersVat += c.total && c.total_vat != null ? sek * (c.total_vat / c.total) : vatOf(sek, env.shopifyVatRate);
     items.push({
       date: !c.due_date || overdue ? now : c.due_date,
       amount: round((c.balance || 0) * c.sek_rate),
@@ -534,6 +545,7 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
     if (p.shopify_status === "FAILED" || p.shopify_status === "CANCELED") continue;
     const issued = p.issued_at.slice(0, 10);
     if (!bankRange || issued < bankRange.to) continue;
+    pipeline.shopify += p.net;
     items.push({ date: issued > now ? issued : now, amount: p.net, kind: "shopify", label: `Shopify-utbetalning #${p.id}`, original: null, href: "/shopify", flag: null });
   }
 
@@ -545,6 +557,7 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
   const next = nextPayout;
   const pendingKnown = !!pending && pending.net > 0;
   if (pending && pendingKnown) {
+    pipeline.shopify += pending.net;
     items.push({ date: next, amount: round(pending.net), kind: "shopify", label: `Shopify, väntande försäljning (${pending.count} transaktioner)`, original: null, href: "/shopify", flag: null });
   }
 
@@ -654,6 +667,14 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
     vatToPay,
     afterVat: cash == null ? null : round(cash - vatToPay - printerAccrued),
     printerAccrued: round(printerAccrued),
+    allIn: cash == null ? null : round(cash - vatToPay - printerAccrued + pipeline.customers - pipeline.customersVat + pipeline.shopify - pipeline.suppliers),
+    pipeline: {
+      customers: round(pipeline.customers),
+      customersOverdue: round(pipeline.customersOverdue),
+      customersVat: round(pipeline.customersVat),
+      shopify: round(pipeline.shopify),
+      suppliers: round(pipeline.suppliers),
+    },
     accrued,
     lowest,
     quarters: quarterResults,
