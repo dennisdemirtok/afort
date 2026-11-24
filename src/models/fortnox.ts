@@ -54,6 +54,11 @@ export function listUnpaidCustomerInvoices(): CustomerInvoice[] {
   return getDb().prepare("SELECT * FROM customer_invoices WHERE cancelled = 0 AND COALESCE(balance, 0) != 0 ORDER BY due_date").all() as CustomerInvoice[];
 }
 
+/** Invoices by invoice date: what was sold in the period. */
+export function customerInvoicesBetween(from: string, to: string): CustomerInvoice[] {
+  return getDb().prepare("SELECT * FROM customer_invoices WHERE cancelled = 0 AND invoice_date BETWEEN ? AND ?").all(from, to) as CustomerInvoice[];
+}
+
 /** Invoices paid in full within the period – the cash method's output VAT. */
 export function customerInvoicesPaidBetween(from: string, to: string): CustomerInvoice[] {
   return getDb().prepare(

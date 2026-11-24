@@ -65,7 +65,10 @@ betalfiler (ISO 20022 pain.001) för Nordea.
   kundfakturor från Fortnox och momsen. Linjen *Prognos* lägger till det som brukar komma: Shopify med snittet av de fyra senaste
   veckornas utbetalningar, kundfakturor med snittet av de 13 senaste veckorna när de skickade fakturorna tar slut (30 dagar fram),
   leverantörer och kort med snittet av de fyra senaste veckorna på kontoutdraget (eller de kända fakturorna om de är fler), och
-  momsen på den beräknade försäljningen. Betalningar som redan syns på kontoutdraget räknas inte två gånger. Momsen är Shopify och
+  momsen på den beräknade försäljningen. Betalningar som redan syns på kontoutdraget räknas inte två gånger.
+  Tryckeriet (Fancywork) fakturerar en månad i taget efter månadens slut ("…/WDT/DRUK") och betalas runt den 14:e. Tills
+  fakturan kommit räknas kostnaden som försäljningen utan moms gånger tryckeriets andel de senaste tre månaderna – för det
+  som redan sålts bland kända poster och i *Kvar efter moms och tryck*, för den beräknade försäljningen i prognosen. Momsen är Shopify och
   kundfakturor minus momsen på svenska fakturor och kvitton; köp från andra EU-länder är omvänd skattskyldighet och tar ut sig själv.
   Momsen räknas med kontantmetoden, som Transfercraft använder: kundfakturor på betaldagen, Shopify på utbetalningsdagen
   (leverantörsfakturor på fakturadatum – de betalas inom några veckor). Momsen på fakturor läses ur PDF:en (`vatFromText`). Sista dag är den 12:e andra månaden efter kvartalet (17 augusti). Ett kvartal

@@ -1,7 +1,7 @@
 import { env } from "../config/env";
 import { BankRow, balanceHistory, bankDataRange, bankRowsSince, latestBalances } from "../models/bank";
-import { customerInvoiceCount, customerInvoicesPaidBetween, listUnpaidCustomerInvoices } from "../models/fortnox";
-import { Invoice, invoicesReceivedBetween, listUnpaidInvoices, payableAmount, today } from "../models/invoice";
+import { customerInvoiceCount, customerInvoicesBetween, customerInvoicesPaidBetween, listUnpaidCustomerInvoices } from "../models/fortnox";
+import { Invoice, invoicesFromVendor, invoicesReceivedBetween, listUnpaidInvoices, payableAmount, today } from "../models/invoice";
 import { Receipt, listReceipts } from "../models/receipt";
 import { ShopifyPayout, listPayouts } from "../models/shopify";
 import { getPendingBalance, vatOf } from "./shopify";
@@ -92,6 +92,66 @@ export function bankCategory(row: Pick<BankRow, "amount" | "name" | "message">):
   if (/kortk[öo]p/i.test(text)) return "card";
   if (/avgifter\s+nordea/i.test(text)) return "otherOut";
   return "suppliers";
+}
+
+// ---- The printer ----
+
+/**
+ * The printer bills everything printed in a month on one invoice after it ("18/10/2026/WDT/DRUK"),
+ * paid about two weeks later. Until that invoice is in, its cost is the month's sales times the
+ * share the printer has taken of sales in recent months.
+ */
+export const PRINTER = {
+  vendor: "Fancywork DTF",
+  name: "Tryckeriet",
+  monthlyInvoice: /^\d+\/(\d{1,2})\/(\d{4})\/.*DRUK$/i,
+  // Its payments on the statement, also when they go through a payment service ("RAFFE ECOMMERCE", "…/WDT/DRUK")
+  bankText: /fancywork|\/DRUK\b/i,
+  paymentDays: 14,
+};
+
+const MONTH_NAMES = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"];
+export const monthName = (month: string) => MONTH_NAMES[Number(month.slice(5, 7)) - 1];
+const nextMonth = (month: string) => {
+  const [y, m] = month.split("-").map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`;
+};
+const endOfMonth = (month: string) => addDays(`${nextMonth(month)}-01`, -1);
+/** The day the printer's invoice for a month is paid. */
+export const printerPayday = (month: string) => addDays(endOfMonth(month), PRINTER.paymentDays);
+
+/** "18/10/2026/WDT/DRUK" → "2026-10" */
+export function printerInvoiceMonth(invoiceNumber: string | null): string | null {
+  const m = (invoiceNumber || "").match(PRINTER.monthlyInvoice);
+  return m ? `${m[2]}-${pad(Number(m[1]))}` : null;
+}
+
+/** Sales per month without VAT: Shopify by payout day (plus what Shopify holds, this month), customer invoices by invoice date. */
+export function salesByMonth(input: {
+  payouts: ShopifyPayout[];
+  pendingGross: number;
+  todayDate: string;
+  customers: { invoice_date: string | null; total: number | null; total_vat: number | null; sek_rate: number }[] | null;
+  bankRows: BankRow[];
+  vatRate: number;
+}): Map<string, number> {
+  const sales = new Map<string, number>();
+  const add = (month: string, amount: number) => sales.set(month, round((sales.get(month) || 0) + amount));
+  const exVat = (gross: number) => gross / (1 + input.vatRate / 100);
+  for (const p of input.payouts) {
+    if (!p.issued_at || p.shopify_status === "FAILED" || p.shopify_status === "CANCELED") continue;
+    add(p.issued_at.slice(0, 7), exVat((p.charges_gross || 0) - Math.abs(p.refunds_gross || 0)));
+  }
+  if (input.pendingGross) add(input.todayDate.slice(0, 7), exVat(input.pendingGross));
+  if (input.customers) {
+    for (const c of input.customers) {
+      if (!c.invoice_date || c.total == null) continue;
+      add(c.invoice_date.slice(0, 7), (c.total - (c.total_vat ?? c.total - exVat(c.total))) * c.sek_rate);
+    }
+  } else {
+    for (const r of input.bankRows) if (bankCategory(r) === "customers") add(r.date.slice(0, 7), exVat(r.amount));
+  }
+  return sales;
 }
 
 // ---- Currency ----
@@ -290,9 +350,12 @@ export interface ForecastBasis {
   customersWeekly: number | null;
   customersFrom: "fortnox" | "bank";
   knownCustomersUntil: string;
-  // Average paid to suppliers and by card per week (positive)
+  // Average paid to suppliers and by card per week (positive), the printer left out
   costsWeekly: number | null;
   vatRate: number;
+  // The printer's share of sales without VAT, and the months it was measured on
+  printerShare: number | null;
+  printerMonths: string[];
 }
 
 /**
@@ -336,6 +399,19 @@ export function estimateItems(basis: ForecastBasis, items: CashItem[], todayDate
   for (const { quarter, vat } of vatByQuarter.values()) {
     if (quarter.dueDate <= last) estimate(quarter.dueDate, -vat, "vat", `Moms på beräknad försäljning ${quarter.label}`);
   }
+
+  // The printer's share of the estimated sales, on the invoice for the month they fall in
+  if (basis.printerShare) {
+    const byMonth = new Map<string, number>();
+    for (const e of estimates) {
+      if (e.amount <= 0 || (e.kind !== "shopify" && e.kind !== "customer")) continue;
+      const month = e.date.slice(0, 7);
+      byMonth.set(month, (byMonth.get(month) || 0) + e.amount / (1 + basis.vatRate / 100));
+    }
+    for (const [month, sales] of byMonth) {
+      if (printerPayday(month) <= last) estimate(printerPayday(month), -sales * basis.printerShare, "supplier", `${PRINTER.name} ${monthName(month)}, på beräknad försäljning`);
+    }
+  }
   return estimates.sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -360,6 +436,8 @@ export interface CashflowOverview {
   cashAgeDays: number | null;
   vatToPay: number;
   afterVat: number | null;
+  printerAccrued: number;
+  accrued: { month: string; sales: number; cost: number; payday: string }[];
   lowest: ForecastWeek | null;
   quarters: VatQuarter[];
   forecast: Forecast | null;
@@ -470,6 +548,53 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
     items.push({ date: next, amount: round(pending.net), kind: "shopify", label: `Shopify, väntande försäljning (${pending.count} transaktioner)`, original: null, href: "/shopify", flag: null });
   }
 
+  // ---- The printer: the month's invoice comes after the month, so its cost builds up meanwhile ----
+  const sales = salesByMonth({
+    payouts,
+    pendingGross: pending?.gross || 0,
+    todayDate: now,
+    customers: fortnoxHasData ? customerInvoicesBetween(addDays(now, -400), now) : null,
+    bankRows,
+    vatRate: env.shopifyVatRate,
+  });
+  const eurRate = rates.get("EUR")?.rate || FALLBACK_RATES.EUR;
+  const printerInvoices = new Map<string, number>();
+  for (const inv of invoicesFromVendor(PRINTER.vendor)) {
+    const month = printerInvoiceMonth(inv.invoice_number);
+    if (!month || inv.amount == null) continue;
+    const rate = inv.currency === "SEK" ? 1 : inv.currency === "EUR" ? eurRate : rates.get(inv.currency)?.rate;
+    if (rate) printerInvoices.set(month, (printerInvoices.get(month) || 0) + inv.amount * rate);
+  }
+  // Measured on the last three months that have both an invoice and sales
+  const measured = [...printerInvoices.keys()].filter((m) => m < now.slice(0, 7) && (sales.get(m) || 0) > 0).sort().slice(-3);
+  const printerShare = measured.length
+    ? Math.round((measured.reduce((t, m) => t + printerInvoices.get(m)!, 0) / measured.reduce((t, m) => t + sales.get(m)!, 0)) * 1000) / 1000
+    : null;
+  let printerAccrued = 0;
+  const accrued: { month: string; sales: number; cost: number; payday: string }[] = [];
+  if (printerShare) {
+    // Last month until its invoice is in, and this month so far
+    const thisMonth = now.slice(0, 7);
+    const lastMonth = addDays(`${thisMonth}-01`, -1).slice(0, 7);
+    for (const month of [lastMonth, thisMonth]) {
+      if (printerInvoices.has(month)) continue;
+      const cost = round((sales.get(month) || 0) * printerShare);
+      if (cost <= 0) continue;
+      const payday = printerPayday(month) < now ? now : printerPayday(month);
+      accrued.push({ month, sales: sales.get(month) || 0, cost, payday });
+      printerAccrued += cost;
+      items.push({
+        date: payday,
+        amount: -cost,
+        kind: "supplier",
+        label: `${PRINTER.name} ${monthName(month)}, ${Math.round(printerShare * 100)} % av försäljningen ${month === thisMonth ? "hittills" : ""}`.trim(),
+        original: null,
+        href: null,
+        flag: "Beräknad",
+      });
+    }
+  }
+
   for (const q of openQuarters) {
     items.push({ date: q.dueDate, amount: -q.net, kind: "vat", label: `Moms ${q.label}${q.status === "building" ? " (hittills)" : ""}`, original: null, href: null, flag: null });
   }
@@ -491,10 +616,15 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
       : statementsCover ? round(inWindow.filter((r) => bankCategory(r) === "customers").reduce((total, r) => total + r.amount, 0) / 4) : null,
     customersFrom: fortnoxHasData ? "fortnox" : "bank",
     knownCustomersUntil: addDays(now, 30),
+    // The printer is left out: it is counted on the sales instead
     costsWeekly: statementsCover
-      ? round(-inWindow.filter((r) => ["suppliers", "card", "otherOut"].includes(bankCategory(r))).reduce((total, r) => total + r.amount, 0) / 4)
+      ? round(-inWindow
+        .filter((r) => ["suppliers", "card", "otherOut"].includes(bankCategory(r)) && !(printerShare && PRINTER.bankText.test(`${r.name} ${r.message}`)))
+        .reduce((total, r) => total + r.amount, 0) / 4)
       : null,
     vatRate: env.shopifyVatRate,
+    printerShare,
+    printerMonths: measured,
   };
   // Without the costs a prognosis would only add income, so it waits for four weeks of statements
   const estimates = cash != null && basis.costsWeekly != null ? estimateItems(basis, items, now, FORECAST_WEEKS) : null;
@@ -522,7 +652,9 @@ export function cashflowOverview(settled: { invoiceIds: Set<string>; payoutIds: 
     cashDate,
     cashAgeDays: cashDate ? Math.round((toTime(now) - toTime(cashDate)) / DAY) : null,
     vatToPay,
-    afterVat: cash == null ? null : round(cash - vatToPay),
+    afterVat: cash == null ? null : round(cash - vatToPay - printerAccrued),
+    printerAccrued: round(printerAccrued),
+    accrued,
     lowest,
     quarters: quarterResults,
     forecast,
